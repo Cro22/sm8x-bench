@@ -11,6 +11,9 @@ __pycache__/
 *.cubin
 build/
 .mojo_cache/
+# compiled Mojo entry-point binaries (built from bench/mojo/*.mojo)
+bench/mojo/gemv_max
+bench/mojo/*_bin
 
 # Local baselines source/build trees (large; rebuilt from pinned SHAs)
 baselines-src/
