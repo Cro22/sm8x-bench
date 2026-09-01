@@ -25,7 +25,10 @@ WEIGHT_FORMATS = ["fp16", "Q8_0", "Q4_0", "Q4_K"]
 # Decode attention: batch 1, one query token, KV from cache
 ATTN_SEQ_LENS = [1024, 4096, 16384]
 ATTN = dict(q_heads=Q_HEADS, kv_heads=KV_HEADS, head_dim=HEAD_DIM, kv_dtype="fp16")
-# paged KV block size: set from the MAX audit (reports/audit.md), do not guess
-PAGE_SIZE = None
+# paged KV block size: from the MAX audit (reports/audit.md). MAX ships 128 as
+# the default AND enforces page_size % 128 == 0 and >= 128
+# (max/python/max/pipelines/kv_cache/registry.py:50). So 128 is the only value
+# a Llama-3-8B decode run uses unless explicitly overridden.
+PAGE_SIZE = 128
 
 SEED = 20260901
