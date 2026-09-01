@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "impl": "max",
+  "kernel": "gemv",
+  "variant": "Q4_0_M1_lm_head",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 3090",
+    "arch": "sm_86",
+    "compute_capability": "8.6",
+    "sms": 82,
+    "driver": "610.62",
+    "cuda_driver_version": "13.3",
+    "graphics_clock_mhz_current": 1695,
+    "graphics_clock_mhz_max": 2100,
+    "graphics_clock_mhz_locked": 1695,
+    "mem_clock_mhz": 5001,
+    "mem_clock_mhz_max": 9751,
+    "mem_clock_locked": false,
+    "power_limit_w": 420.0
+  },
+  "shape": {
+    "M": 1,
+    "N": 128256,
+    "K": 4096
+  },
+  "dtype": {
+    "weights": "Q4_0",
+    "activations": "bf16",
+    "accum": "fp32"
+  },
+  "bytes_moved": 295766528,
+  "flops": 1050673152,
+  "timing": {
+    "source": "nsys_gpukernsum",
+    "n_instances": 131,
+    "launches_per_sample": 0,
+    "median_us": 2094.074,
+    "q1_us": 0,
+    "q3_us": 0,
+    "min_us": 2091.278,
+    "p95_us": 0,
+    "nsys_mean_us": 2138.9464,
+    "harness_wallclock_median_us": 2153.504,
+    "kernels": [
+      {
+        "name": "multistage_qgemm_bfloat16_uint8_bfloat16_g32_af39109a",
+        "instances": 131,
+        "avg_us": 2138.9464
+      }
+    ]
+  },
+  "achieved_gbps": 141.24,
+  "achieved_tflops": 0.502,
+  "roofline": {
+    "spec_gbps": 936.0,
+    "measured_gbps": 815.5,
+    "pct_spec": 15.1,
+    "pct_measured": 17.3
+  },
+  "correctness": {
+    "validated": true,
+    "l2_rel_err": 0.0037796055,
+    "max_abs_err": 1.7319336,
+    "max_rel_err": 65.2186,
+    "tolerance": "l2_rel<3e-2"
+  },
+  "env": {
+    "mojo_version": "1.0.0",
+    "max_version": "26.5.0",
+    "modular_sha": "b4497b7ce9ba96331c72c637ad41b44bab374f33",
+    "cuda_version": "13.3",
+    "llamacpp_sha": "",
+    "flashinfer_version": "unknown",
+    "harness_sha": "7380d5fd7d910f313f59612130c04a3c36bda563-dirty",
+    "timestamp_utc": "2026-09-01T23:14:27.332787+00:00"
+  },
+  "notes": "nsys-authoritative timing; kernel(s): multistage_qgemm_bfloat16_uint8_bfloat16_g32_af39109a. harness wall-clock median 2153.504 us (1.0x nsys \u2014 dispatch overhead if >>1). "
+}

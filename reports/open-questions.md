@@ -64,3 +64,10 @@ M=1 GEMV-tuned config for Q4_0. Q: is `matmul_gpu_qint4[32]` expected to work on
 consumer Ampere for Q4_0, or is GGUF Q4_0 only wired through the graph compiler
 with dynamic shapes (which then also fail the "Layout must be fully static"
 constraint on B here)? Repro: bench/mojo/qgemv_max.mojo history + api-drift.md.
+
+Follow-up (measured): even the working BK=32 `default_config` **crashes with
+CUDA_ERROR_ILLEGAL_ADDRESS for K=14336** (Llama-3 down_proj, N=4096) at
+group_size=32 on sm_86 — so that shape has no working Q4_0 GPU path at all. The
+shapes that DO run (K=4096) measure 6-15% of the memory roofline (166 us at
+N=4096 up to 2094 us at N=128256), ~4x slower than the fp16 GEMV. See
+bench/results/max_gemv_Q4*.json.
