@@ -43,3 +43,26 @@
 
 All of the above verified by `bench/mojo/bw_probe.mojo` compiling and running on
 the RTX 3090 (sm_86), Mojo 1.0.0 / max 26.5.0.
+
+## From bench/mojo/gemv_max.mojo (calling the MAX matmul/GEMV kernel)
+
+- Kernel: `from linalg.matmul import matmul`; call
+  `matmul[transpose_b=True, target="gpu"](c, a, b, ctx)`. `target` is a
+  `StaticString` — pass the literal **`"gpu"`**, NOT `get_gpu_target()` (which
+  returns an MLIR target type). GPU path uses `target` only for the `is_cpu[]`
+  check + tracing; arch/kernel selection comes from `ctx` device info. M=1
+  routes to the dedicated GEMV internally. (`matmul/__init__.mojo:107-147`.)
+- TileTensor over a device buffer: `from layout import TileTensor, row_major`;
+  `var t = TileTensor(dev_buf, row_major(rows, cols))` (`row_major` takes
+  runtime `Int`s; default address space is `AddressSpace.GENERIC`, which matmul
+  requires). Pattern from `test/gpu/linalg/test_gemv.mojo:142`. Layout:
+  a=x[M,K], b=W[N,K] with transpose_b=True, c=y[M,N].
+- `open(path, "rb")` → runtime error `invalid mode: "rb"`. Valid modes:
+  `{"r","w","rw","a"}`. Use `open(path, "r")`; `read_bytes()` still returns raw
+  `List[UInt8]`.
+- `memcpy` → deprecated; use `from std.memory import unsafe_memcpy` with
+  `dest=`, `src=`, `count=` (count in elements).
+- `ptr.bitcast[T]()` → deprecated; use `ptr.unsafe_bitcast[T]()`.
+- `ref` is a reserved keyword (origin syntax) — cannot be a variable name.
+- `ptr[i]` positional indexing → deprecated (wants `unsafe_offset=`); read into
+  a `HostBuffer` and index that instead.
