@@ -1,0 +1,23 @@
+[project]
+name = "sm8x-bench"
+version = "0.1.0"
+description = "Benchmark workbench for LLM inference kernels (MAX/Mojo) on consumer NVIDIA GPUs (sm_86 / sm_89)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "max==26.5.0",
+    "mojo>=1.0.0",
+    "numpy>=2.0",
+    "pynvml>=11.5",
+    "gguf>=0.10",
+]
+
+# H0 toolchain decision (2026-09-01): Jesús chose "latest nightly", but the
+# Modular nightly channels are not usable:
+#   - pip nightly index https://dl.modular.com/public/nightly/python/simple/ -> 404
+#   - conda max-nightly is frozen at mojo 25.6.0.dev2025090305 / max 25.5.0,
+#     which is OLDER than the PyPI stable line (new 26.x / mojo 1.0.0 scheme).
+# So the newest publicly installable MAX/Mojo is max==26.5.0 / mojo 1.0.0 on
+# PyPI. This also matches the proven mojo-cuda-ampere methodology. The modular/
+# source checkout is pinned to the tag/SHA matching 26.5.0 so "audited source ==
+# benchmarked binary". Record both in results JSON.

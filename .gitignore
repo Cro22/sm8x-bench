@@ -1,0 +1,32 @@
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+.uv/
+
+# Build artifacts
+*.o
+*.so
+*.ptx
+*.cubin
+build/
+.mojo_cache/
+
+# Local baselines source/build trees (large; rebuilt from pinned SHAs)
+baselines-src/
+llama.cpp/
+flashinfer/
+
+# Model weights (never committed)
+*.gguf
+*.safetensors
+weights/
+
+# Profiler output
+*.nsys-rep
+*.sqlite
+*.ncu-rep
+
+# OS / editor
+.idea/
+.DS_Store

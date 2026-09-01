@@ -1,0 +1,5 @@
+[submodule "modular"]
+	path = modular
+	url = https://github.com/modular/modular.git
+	branch = max/v26.5.0
+	shallow = true
