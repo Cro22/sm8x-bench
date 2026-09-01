@@ -22,6 +22,9 @@ flashinfer/
 *.safetensors
 weights/
 
+# Generated inputs/references (large, regenerable via bench/reference.py)
+bench/inputs/
+
 # Profiler output
 *.nsys-rep
 *.sqlite
