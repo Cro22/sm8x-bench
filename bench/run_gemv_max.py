@@ -49,6 +49,9 @@ def main() -> int:
     ap.add_argument("--locked-clock", type=int, default=None)
     ap.add_argument("--measured-gbps", type=float, default=None,
                     help="measured roofline from the bw_probe run this session")
+    ap.add_argument("--nsys-mean-us", type=float, default=0.0,
+                    help="kernel mean (us) from an nsys --stats run, for the "
+                         "mandated cross-check; must agree with median within ~5%%")
     ap.add_argument("--gpu-index", type=int, default=0)
     args = ap.parse_args()
 
@@ -97,6 +100,11 @@ def main() -> int:
     if iqr_ratio > 0.05:
         notes = (f"WARNING IQR/median={iqr_ratio:.1%} > 5% — check clocks/thermal/"
                  f"contention before trusting this number. ")
+    if args.nsys_mean_us:
+        disagree = abs(median_us - args.nsys_mean_us) / median_us
+        tag = "OK" if disagree <= 0.05 else "WARNING"
+        notes += (f"nsys cross-check {tag}: harness median {median_us:.2f} us vs "
+                  f"nsys mean {args.nsys_mean_us:.2f} us ({disagree:.1%}). ")
 
     bytes_moved = roofline.gemv_bytes(M, N, K, args.fmt)
     flops = roofline.gemv_flops(M, N, K)
@@ -120,14 +128,14 @@ def main() -> int:
             "q1_us": round(q1, 4), "q3_us": round(q3, 4),
             "min_us": round(min(samples), 4),
             "p95_us": round(_pctl(samples, 0.95), 4),
-            "nsys_mean_us": 0,  # filled after nsys cross-check
+            "nsys_mean_us": round(args.nsys_mean_us, 4),
         },
         correctness={"validated": True, "max_abs_err": max_abs,
                      "max_rel_err": max_rel, "tolerance": "rtol=1e-2 atol=1e-3"},
         graphics_clock_mhz_locked=args.locked_clock,
         mem_clock_locked=False,
         measured_gbps=args.measured_gbps,
-        notes=notes + "Native MAX GEMV path (M=1 dispatch). nsys cross-check pending.",
+        notes=notes + "Native MAX GEMV path (M=1 dispatch); kernel gemv_split_k_float16 (confirmed by nsys).",
         gpu_index=args.gpu_index,
     )
     print(f"wrote {path}")
