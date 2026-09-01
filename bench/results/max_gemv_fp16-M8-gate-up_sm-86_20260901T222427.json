@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "impl": "max",
+  "kernel": "gemv",
+  "variant": "fp16_M8_gate_up",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 3090",
+    "arch": "sm_86",
+    "compute_capability": "8.6",
+    "sms": 82,
+    "driver": "610.62",
+    "cuda_driver_version": "13.3",
+    "graphics_clock_mhz_current": 1695,
+    "graphics_clock_mhz_max": 2100,
+    "graphics_clock_mhz_locked": 1695,
+    "mem_clock_mhz": 9951,
+    "mem_clock_mhz_max": 9751,
+    "mem_clock_locked": false,
+    "power_limit_w": 420.0
+  },
+  "shape": {
+    "M": 8,
+    "N": 28672,
+    "K": 4096
+  },
+  "dtype": {
+    "weights": "fp16",
+    "activations": "fp16",
+    "accum": "fp32"
+  },
+  "bytes_moved": 235405312,
+  "flops": 1879048192,
+  "timing": {
+    "source": "nsys_gpukernsum",
+    "n_instances": 262,
+    "launches_per_sample": 0,
+    "median_us": 334.955,
+    "q1_us": 0,
+    "q3_us": 0,
+    "min_us": 316.391,
+    "p95_us": 0,
+    "nsys_mean_us": 333.3942,
+    "harness_wallclock_median_us": 1192.816,
+    "kernels": [
+      {
+        "name": "void cutlass::Kernel2<cutlass_80_tensorop_f16_s16816gemm_relu_f16_256x64_32x4_tn_align8>(T1::Params)",
+        "instances": 131,
+        "avg_us": 327.7985
+      },
+      {
+        "name": "void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, __half, __half, float, __half, (bool)0, _\u2026",
+        "instances": 131,
+        "avg_us": 5.5957
+      }
+    ]
+  },
+  "achieved_gbps": 702.8,
+  "achieved_tflops": 5.61,
+  "roofline": {
+    "spec_gbps": 936.0,
+    "measured_gbps": 815.5,
+    "pct_spec": 75.1,
+    "pct_measured": 86.2
+  },
+  "correctness": {
+    "validated": true,
+    "l2_rel_err": 0.00029629027,
+    "max_abs_err": 0.12954712,
+    "max_rel_err": 49.09974,
+    "tolerance": "l2_rel<3e-2 (M>1 GEMM path may use fp16 accumulation)"
+  },
+  "env": {
+    "mojo_version": "1.0.0",
+    "max_version": "26.5.0",
+    "modular_sha": "b4497b7ce9ba96331c72c637ad41b44bab374f33",
+    "cuda_version": "13.3",
+    "llamacpp_sha": "",
+    "flashinfer_version": "unknown",
+    "harness_sha": "1e22ed569364dcd4ad06991337bb6778c028d214-dirty",
+    "timestamp_utc": "2026-09-01T22:24:27.224579+00:00"
+  },
+  "notes": "nsys-authoritative timing; kernel(s): void cutlass::Kernel2<cutlass_80_tensorop_f16_s16816gemm_relu_f16_256x64_32x4_tn_align8>(T1::Params), void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, __half, __half, float, __half, (bool)0, _\u2026. harness wall-clock median 1192.816 us (3.6x nsys \u2014 dispatch overhead if >>1). "
+}

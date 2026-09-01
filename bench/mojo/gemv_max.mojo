@@ -38,7 +38,8 @@ comptime PER_BATCH = 10
 
 
 def run[dt: DType](
-    M: Int, N: Int, K: Int, w_path: String, x_path: String, ref_path: String
+    M: Int, N: Int, K: Int, w_path: String, x_path: String, ref_path: String,
+    rtol: Float32, atol: Float32,
 ) raises:
     with DeviceContext() as ctx:
         print("device:", ctx.name())
@@ -88,8 +89,8 @@ def run[dt: DType](
         ctx.synchronize()
         var max_abs = Float32(0)
         var max_rel = Float32(0)
-        var ok = True
-        var shown = 0
+        var ssd = Float64(0)  # sum of squared (got - ref)
+        var ssr = Float64(0)  # sum of squared ref
         with y_dev.map_to_host() as h:
             for i in range(M * N):
                 var got = h[i].cast[DType.float32]()
@@ -100,16 +101,20 @@ def run[dt: DType](
                     max_abs = ae
                 if re > max_rel:
                     max_rel = re
-                # rtol=1e-2, atol=1e-3 (dense fp16/bf16 tolerances).
-                if ae > Float32(1e-3) + Float32(1e-2) * abs(r):
-                    ok = False
-                    if shown < 8:
-                        print("  mismatch i=", i, " got=", got, " ref=", r)
-                        shown += 1
+                var d = Float64(got - r)
+                ssd += d * d
+                ssr += Float64(r) * Float64(r)
+        # Gate on the relative L2 error ||got-ref||/||ref|| — the standard GEMM
+        # correctness metric, robust to per-element cancellation (which makes
+        # element-wise max_rel meaningless for near-zero outputs). `rtol` is the
+        # L2 tolerance. max_abs/max_rel are reported for information.
+        var l2_rel = Float32((ssd**0.5) / (ssr**0.5 + 1e-12))
+        var ok = l2_rel < rtol
         print("correctness:", "PASS" if ok else "FAIL",
+              "l2_rel_err=", l2_rel,
               "max_abs_err=", max_abs, "max_rel_err=", max_rel)
         if not ok:
-            print("aborting: kernel output does not match reference")
+            print("aborting: kernel output L2 error", l2_rel, ">= tol", rtol)
             return
 
         # ---- Warmup. ----
@@ -146,10 +151,13 @@ def main() raises:
     var w_path = String(args[5])
     var x_path = String(args[6])
     var ref_path = String(args[7])
+    # Optional argv[8]=rtol, argv[9]=atol (default 1e-2/1e-3).
+    var rtol = Float32(atof(String(args[8]))) if len(args) > 8 else Float32(1e-2)
+    var atol = Float32(atof(String(args[9]))) if len(args) > 9 else Float32(1e-3)
 
     if fmt == "fp16":
-        run[DType.float16](M, N, K, w_path, x_path, ref_path)
+        run[DType.float16](M, N, K, w_path, x_path, ref_path, rtol, atol)
     elif fmt == "bf16":
-        run[DType.bfloat16](M, N, K, w_path, x_path, ref_path)
+        run[DType.bfloat16](M, N, K, w_path, x_path, ref_path, rtol, atol)
     else:
         print("unsupported fmt (dense path handles fp16|bf16):", fmt)

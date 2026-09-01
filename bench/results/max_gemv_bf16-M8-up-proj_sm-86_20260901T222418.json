@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "impl": "max",
+  "kernel": "gemv",
+  "variant": "bf16_M8_up_proj",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 3090",
+    "arch": "sm_86",
+    "compute_capability": "8.6",
+    "sms": 82,
+    "driver": "610.62",
+    "cuda_driver_version": "13.3",
+    "graphics_clock_mhz_current": 1695,
+    "graphics_clock_mhz_max": 2100,
+    "graphics_clock_mhz_locked": 1695,
+    "mem_clock_mhz": 5001,
+    "mem_clock_mhz_max": 9751,
+    "mem_clock_locked": false,
+    "power_limit_w": 420.0
+  },
+  "shape": {
+    "M": 8,
+    "N": 14336,
+    "K": 4096
+  },
+  "dtype": {
+    "weights": "bf16",
+    "activations": "bf16",
+    "accum": "fp32"
+  },
+  "bytes_moved": 117735424,
+  "flops": 939524096,
+  "timing": {
+    "source": "nsys_gpukernsum",
+    "n_instances": 131,
+    "launches_per_sample": 0,
+    "median_us": 156.338,
+    "q1_us": 0,
+    "q3_us": 0,
+    "min_us": 146.179,
+    "p95_us": 0,
+    "nsys_mean_us": 155.3626,
+    "harness_wallclock_median_us": 1131.928,
+    "kernels": [
+      {
+        "name": "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn",
+        "instances": 131,
+        "avg_us": 155.3626
+      }
+    ]
+  },
+  "achieved_gbps": 753.08,
+  "achieved_tflops": 6.01,
+  "roofline": {
+    "spec_gbps": 936.0,
+    "measured_gbps": 815.5,
+    "pct_spec": 80.5,
+    "pct_measured": 92.3
+  },
+  "correctness": {
+    "validated": true,
+    "l2_rel_err": 0.0016668697,
+    "max_abs_err": 0.8809509,
+    "max_rel_err": 0.09765236,
+    "tolerance": "l2_rel<3e-2 (M>1 GEMM path may use fp16 accumulation)"
+  },
+  "env": {
+    "mojo_version": "1.0.0",
+    "max_version": "26.5.0",
+    "modular_sha": "b4497b7ce9ba96331c72c637ad41b44bab374f33",
+    "cuda_version": "13.3",
+    "llamacpp_sha": "",
+    "flashinfer_version": "unknown",
+    "harness_sha": "1e22ed569364dcd4ad06991337bb6778c028d214-dirty",
+    "timestamp_utc": "2026-09-01T22:24:18.563671+00:00"
+  },
+  "notes": "nsys-authoritative timing; kernel(s): ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn. harness wall-clock median 1131.928 us (7.2x nsys \u2014 dispatch overhead if >>1). "
+}

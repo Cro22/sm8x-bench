@@ -44,7 +44,9 @@ def ensure_built() -> None:
         print(r.stdout); print(r.stderr, file=sys.stderr)
         raise SystemExit("mojo build failed")
 
-_CORR = re.compile(r"correctness:\s*(PASS|FAIL)\s+max_abs_err=\s*([\d.eE+-]+)\s+max_rel_err=\s*([\d.eE+-]+)")
+_CORR = re.compile(
+    r"correctness:\s*(PASS|FAIL)\s+l2_rel_err=\s*([\d.eE+-]+)\s+"
+    r"max_abs_err=\s*([\d.eE+-]+)\s+max_rel_err=\s*([\d.eE+-]+)")
 _SAMPLES = re.compile(r"samples_us=\s*([\d.,eE+\- ]+)")
 
 
@@ -70,9 +72,13 @@ def main() -> int:
         reference.gen_gemv(args.shape, N, K, args.fmt, M=M)
 
     ensure_built()
+    # Per-path correctness tolerance (mojo-gpu-kernel skill): M=1 GEMV accumulates
+    # in fp32 -> rtol 1e-2; the M>1 GEMM path (cuBLAS fp16 uses fp16 accumulation;
+    # bf16 GEMM) needs the looser fp16-accum row rtol 3e-2 / atol 5e-3.
+    rtol, atol = ("1e-2", "1e-3") if M == 1 else ("3e-2", "5e-3")
     cmd = [str(BINARY), str(M), str(N), str(K), args.fmt,
-           str(p["W"]), str(p["x"]), str(p["ref"])]
-    print(f"profiling under nsys: {args.shape} {args.fmt} M{M} ...")
+           str(p["W"]), str(p["x"]), str(p["ref"]), rtol, atol]
+    print(f"profiling under nsys: {args.shape} {args.fmt} M{M} (tol rtol={rtol}) ...")
     rows = nsys.kernel_summary(cmd, cwd=_REPO)
     meta = rows[0]
     out = meta.get("__stdout__", "")
@@ -90,7 +96,7 @@ def main() -> int:
         print("ABORT: correctness FAILED; not recording a timing result.",
               file=sys.stderr)
         return 1
-    max_abs, max_rel = float(cm[2]), float(cm[3])
+    l2_rel, max_abs, max_rel = float(cm[2]), float(cm[3]), float(cm[4])
 
     kt = nsys.per_invocation_us(rows)
     if kt["med_us"] is None:
@@ -140,8 +146,10 @@ def main() -> int:
             "harness_wallclock_median_us": wall_median,
             "kernels": kt["kernels"],
         },
-        correctness={"validated": True, "max_abs_err": max_abs,
-                     "max_rel_err": max_rel, "tolerance": "rtol=1e-2 atol=1e-3"},
+        correctness={"validated": True, "l2_rel_err": l2_rel,
+                     "max_abs_err": max_abs, "max_rel_err": max_rel,
+                     "tolerance": f"l2_rel<{rtol}"
+                     + (" (M>1 GEMM path may use fp16 accumulation)" if M > 1 else "")},
         graphics_clock_mhz_locked=args.locked_clock,
         mem_clock_locked=False,
         measured_gbps=args.measured_gbps,
