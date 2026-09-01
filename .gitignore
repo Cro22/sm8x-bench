@@ -17,10 +17,13 @@ bench/mojo/qgemv_max
 bench/mojo/attn_max
 bench/mojo/*_bin
 
-# Local baselines source/build trees (large; rebuilt from pinned SHAs)
+# Local baselines source/build trees (large; rebuilt from pinned SHAs).
+# Keep bench/baselines/<name>/{PIN, *.cpp, *.py} committed; ignore src/ and build/.
 baselines-src/
 llama.cpp/
 flashinfer/
+bench/baselines/*/src/
+bench/baselines/*/build/
 
 # Model weights (never committed)
 *.gguf
