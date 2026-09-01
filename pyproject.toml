@@ -10,6 +10,7 @@ dependencies = [
     "numpy>=2.0",
     "pynvml>=11.5",
     "gguf>=0.10",
+    "ml_dtypes>=0.5",
 ]
 
 # H0 toolchain decision (2026-09-01): Jesús chose "latest nightly", but the

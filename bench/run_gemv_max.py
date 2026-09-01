@@ -22,7 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from bench import roofline, shapes
+from bench import reference, roofline, shapes
 from bench.results_io import write_result
 
 REPO = Path(__file__).resolve().parent.parent
@@ -61,8 +61,16 @@ def main() -> int:
     _, N, K = table[args.shape]
     M = args.M
 
+    # Ensure the seeded inputs + fp32 reference exist (generate if missing).
+    p = reference.gemv_paths(args.shape, args.fmt, M)
+    if not (p["W"].exists() and p["x"].exists() and p["ref"].exists()):
+        print(f"generating inputs for {args.shape} {args.fmt} M{M} ...")
+        reference.gen_gemv(args.shape, N, K, args.fmt, M=M)
+
     proc = subprocess.run(
-        ["mojo", "run", "-I", "modular/max/kernels/src", str(ENTRY)],
+        ["mojo", "run", "-I", "modular/max/kernels/src", str(ENTRY),
+         str(M), str(N), str(K), args.fmt,
+         str(p["W"]), str(p["x"]), str(p["ref"])],
         capture_output=True, text=True, cwd=REPO,
     )
     out = proc.stdout

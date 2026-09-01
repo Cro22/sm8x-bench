@@ -1,19 +1,21 @@
 # ===----------------------------------------------------------------------=== #
-# MAX matmul/GEMV harness entry point: decode-shaped M=1 fp16 GEMV.
+# MAX matmul/GEMV harness entry point (generalized, dense fp16/bf16).
 #
-# Launches the upstream MAX `linalg.matmul.matmul` kernel (which routes GPU M=1
-# internally to its dedicated GEMV) for y[1,N] = x[1,K] @ W[N,K]^T, all fp16
-# (fp32 accumulation inside), validates against a precomputed fp32 reference,
-# then times it with the device-event timer.
+# Launches the upstream MAX `linalg.matmul.matmul` kernel for
+# y[M,N] = x[M,K] @ W[N,K]^T (transpose_b). M=1 routes to the dedicated GEMV;
+# M>1 bf16 -> the tiled tensor-core GEMM; M>1 fp16 -> cuBLAS (see audit).
+# Validates against a precomputed fp32 reference, then times with the
+# device-event timer.
 #
-# Shapes are the Llama-3-8B o_proj GEMV: N=4096, K=4096, M=1.
-# Inputs are raw little-endian, no header, in bench/inputs/ (see task spec).
+# Args (all positional):  M N K fmt W_path x_path ref_path
+#   fmt in {fp16, bf16} selects the weight+activation dtype (both share it).
+# Inputs are raw little-endian, no header (see bench/reference.py).
 #
-# Methodology (see .claude/skills/bench-methodology):
-#   - Uploads happen once, OUTSIDE the timed region.
-#   - Correctness (fp16 output cast to fp32 vs fp32 reference) BEFORE timing;
-#     if it fails we print sample mismatches and stop.
-#   - Warmup: >=10 untimed launches.
+# Methodology (.claude/skills/bench-methodology):
+#   - Uploads once, OUTSIDE the timed region.
+#   - Correctness (output cast to fp32 vs fp32 ref) BEFORE timing.
+#   - Warmup >=10 untimed launches.
+#   - Auto-calibrate LAUNCHES so one timed batch is >= ~5 ms (shape-independent).
 #   - 30 samples; each times LAUNCHES back-to-back launches with
 #     ctx.execution_time and divides by LAUNCHES. The Python runner parses the
 #     printed `samples_us=` line and computes median/IQR.
@@ -24,68 +26,49 @@ from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext
 from std.memory import unsafe_memcpy
 from std.sys import has_accelerator
-
-comptime M = 1
-comptime N = 4096
-comptime K = 4096
-
-comptime W_PATH = "bench/inputs/gemv_o_proj_fp16_W.bin"  # [N, K] fp16, row-major
-comptime X_PATH = "bench/inputs/gemv_o_proj_x.bin"  # [M, K] fp16
-comptime REF_PATH = "bench/inputs/gemv_o_proj_fp16_ref.bin"  # [M, N] fp32
-
-comptime RTOL = Float32(1e-2)
-comptime ATOL = Float32(1e-3)
+from std.sys.arg import argv
 
 comptime WARMUP = 10
 comptime SAMPLES = 30
-comptime LAUNCHES = 256  # back-to-back launches per timed sample
+comptime TARGET_BATCH_US = 5000.0  # >= 5 ms per timed batch
 
 
-def main() raises:
-    comptime assert has_accelerator(), "This harness requires a supported GPU"
-
+def run[dt: DType](
+    M: Int, N: Int, K: Int, w_path: String, x_path: String, ref_path: String
+) raises:
     with DeviceContext() as ctx:
         print("device:", ctx.name())
 
-        # ---- Host staging buffers, filled from the raw .bin inputs. ----
-        var w_host = ctx.enqueue_create_host_buffer[DType.float16](N * K)
-        var x_host = ctx.enqueue_create_host_buffer[DType.float16](M * K)
-
-        with open(W_PATH, "r") as f:
-            var raw = f.read_bytes()
-            unsafe_memcpy(
-                dest=w_host.unsafe_ptr(),
-                src=raw.unsafe_ptr().unsafe_bitcast[Scalar[DType.float16]](),
-                count=N * K,
-            )
-        with open(X_PATH, "r") as f:
-            var raw = f.read_bytes()
-            unsafe_memcpy(
-                dest=x_host.unsafe_ptr(),
-                src=raw.unsafe_ptr().unsafe_bitcast[Scalar[DType.float16]](),
-                count=M * K,
-            )
-
-        # fp32 reference, kept on host for the correctness check.
+        # ---- Host staging, filled from raw .bin inputs (W,x in dt; ref f32). ----
+        var w_host = ctx.enqueue_create_host_buffer[dt](N * K)
+        var x_host = ctx.enqueue_create_host_buffer[dt](M * K)
         var ref_host = ctx.enqueue_create_host_buffer[DType.float32](M * N)
-        with open(REF_PATH, "r") as f:
+        with open(w_path, "r") as f:
             var raw = f.read_bytes()
-            unsafe_memcpy(
-                dest=ref_host.unsafe_ptr(),
-                src=raw.unsafe_ptr().unsafe_bitcast[Scalar[DType.float32]](),
-                count=M * N,
-            )
+            unsafe_memcpy(dest=w_host.unsafe_ptr(),
+                          src=raw.unsafe_ptr().unsafe_bitcast[Scalar[dt]](),
+                          count=N * K)
+        with open(x_path, "r") as f:
+            var raw = f.read_bytes()
+            unsafe_memcpy(dest=x_host.unsafe_ptr(),
+                          src=raw.unsafe_ptr().unsafe_bitcast[Scalar[dt]](),
+                          count=M * K)
+        with open(ref_path, "r") as f:
+            var raw = f.read_bytes()
+            unsafe_memcpy(dest=ref_host.unsafe_ptr(),
+                          src=raw.unsafe_ptr().unsafe_bitcast[Scalar[DType.float32]](),
+                          count=M * N)
 
         # ---- Device buffers; upload once (NOT timed). ----
-        var w_dev = ctx.enqueue_create_buffer[DType.float16](N * K)
-        var x_dev = ctx.enqueue_create_buffer[DType.float16](M * K)
-        var y_dev = ctx.enqueue_create_buffer[DType.float16](M * N)
+        var w_dev = ctx.enqueue_create_buffer[dt](N * K)
+        var x_dev = ctx.enqueue_create_buffer[dt](M * K)
+        var y_dev = ctx.enqueue_create_buffer[dt](M * N)
         ctx.enqueue_copy(w_dev, w_host)
         ctx.enqueue_copy(x_dev, x_host)
         y_dev.enqueue_fill(0)
         ctx.synchronize()
 
-        # a = x [M, K], b = W [N, K] (transpose_b), c = y [M, N].
+        # a = x [M,K], b = W [N,K] (transpose_b), c = y [M,N].
         var a_t = TileTensor(x_dev, row_major(M, K))
         var b_t = TileTensor(w_dev, row_major(N, K))
         var c_t = TileTensor(y_dev, row_major(M, N))
@@ -96,10 +79,9 @@ def main() raises:
         def launch(ctx: DeviceContext) raises:
             matmul[transpose_b=True, target="gpu"](c_t, a_t, b_t, ctx)
 
-        # ---- Correctness: one launch, compare fp16 output (as fp32) to ref. ----
+        # ---- Correctness: one launch, compare output (as fp32) to ref. ----
         launch(ctx)
         ctx.synchronize()
-
         var max_abs = Float32(0)
         var max_rel = Float32(0)
         var ok = True
@@ -114,40 +96,65 @@ def main() raises:
                     max_abs = ae
                 if re > max_rel:
                     max_rel = re
-                if ae > ATOL + RTOL * abs(r):
+                # rtol=1e-2, atol=1e-3 (dense fp16/bf16 tolerances).
+                if ae > Float32(1e-3) + Float32(1e-2) * abs(r):
                     ok = False
                     if shown < 8:
                         print("  mismatch i=", i, " got=", got, " ref=", r)
                         shown += 1
-
-        print(
-            "correctness:",
-            "PASS" if ok else "FAIL",
-            "max_abs_err=",
-            max_abs,
-            "max_rel_err=",
-            max_rel,
-        )
+        print("correctness:", "PASS" if ok else "FAIL",
+              "max_abs_err=", max_abs, "max_rel_err=", max_rel)
         if not ok:
             print("aborting: kernel output does not match reference")
             return
 
-        # ---- Warmup (untimed). ----
+        # ---- Warmup. ----
         for _ in range(WARMUP):
             launch(ctx)
         ctx.synchronize()
 
-        # ---- 30 timed samples, each LAUNCHES launches on the device-event timer. ----
+        # ---- Auto-calibrate launches/batch so one batch >= TARGET_BATCH_US. ----
+        var calib_ns = Float64(ctx.execution_time[launch](8))
+        var one_us = (calib_ns / 8.0) / 1000.0
+        var launches = Int(TARGET_BATCH_US / one_us) + 1 if one_us > 0 else 64
+        if launches < 1:
+            launches = 1
+        if launches > 2000:
+            launches = 2000
+
+        # ---- 30 timed samples. ----
         var samples = List[Float64]()
         for _ in range(SAMPLES):
-            var total_ns = Float64(ctx.execution_time[launch](LAUNCHES))
-            var per_launch_us = total_ns / Float64(LAUNCHES) / 1000.0
-            samples.append(per_launch_us)
+            var total_ns = Float64(ctx.execution_time[launch](launches))
+            samples.append((total_ns / Float64(launches)) / 1000.0)
 
-        print("launches_per_sample=", LAUNCHES)
+        print("launches_per_sample=", launches)
         var line = String("samples_us= ")
         for i in range(len(samples)):
             if i > 0:
                 line += ","
             line += String(samples[i])
         print(line)
+
+
+def main() raises:
+    comptime assert has_accelerator(), "This harness requires a supported GPU"
+    var args = argv()
+    # args[0] is the program path.
+    if len(args) < 8:
+        print("usage: gemv_max M N K fmt W_path x_path ref_path")
+        return
+    var M = Int(String(args[1]))
+    var N = Int(String(args[2]))
+    var K = Int(String(args[3]))
+    var fmt = String(args[4])
+    var w_path = String(args[5])
+    var x_path = String(args[6])
+    var ref_path = String(args[7])
+
+    if fmt == "fp16":
+        run[DType.float16](M, N, K, w_path, x_path, ref_path)
+    elif fmt == "bf16":
+        run[DType.bfloat16](M, N, K, w_path, x_path, ref_path)
+    else:
+        print("unsupported fmt (dense path handles fp16|bf16):", fmt)

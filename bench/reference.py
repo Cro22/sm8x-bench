@@ -16,23 +16,51 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
+import ml_dtypes
 import numpy as np
 
 from bench import shapes
 
 INPUTS_DIR = Path(__file__).resolve().parent / "inputs"
 
+# Activation dtype each MAX weight-format path actually consumes (from the audit):
+# fp16 weights -> fp16 acts; bf16 weights and the int4 (Q4_0) kernel -> bf16 acts.
+ACT_DTYPE = {
+    "fp16": np.float16,
+    "bf16": ml_dtypes.bfloat16,
+    "Q8_0": ml_dtypes.bfloat16,
+    "Q4_0": ml_dtypes.bfloat16,
+    "Q4_K": ml_dtypes.bfloat16,
+}
+_ACT_TAG = {np.float16: "fp16", ml_dtypes.bfloat16: "bf16"}
+
+
+def gemv_paths(name: str, fmt: str, M: int) -> dict:
+    """Canonical input/reference file paths for a GEMV config. The single source
+    of truth for filenames — reference.py writes them, run_gemv_max.py reads them.
+    W is M-independent (not duplicated per M); x depends on activation dtype+M;
+    ref depends on fmt+M."""
+    act_tag = _ACT_TAG[ACT_DTYPE[fmt]]
+    return {
+        "act_tag": act_tag,
+        "W": INPUTS_DIR / f"gemv_{name}_{fmt}_W.bin",
+        "x": INPUTS_DIR / f"gemv_{name}_{act_tag}_M{M}_x.bin",
+        "ref": INPUTS_DIR / f"gemv_{name}_{fmt}_M{M}_ref.bin",
+    }
+
 
 def _rng(*tags) -> np.random.Generator:
-    # Stable per-(shape,fmt) stream derived from the canonical SEED so each
-    # tensor is reproducible and independent.
-    mix = shapes.SEED
-    for t in tags:
-        mix = (mix * 1000003 + hash(str(t))) & 0xFFFFFFFFFFFF
-    return np.random.default_rng(mix)
+    # Stable per-(shape,fmt,...) stream derived from the canonical SEED. Uses a
+    # process-STABLE hash (hashlib) — Python's builtin hash() is randomized per
+    # process (PYTHONHASHSEED), which would make the same tensor differ between
+    # invocations and silently break W/ref consistency across separate runs.
+    key = f"{shapes.SEED}|" + "|".join(str(t) for t in tags)
+    digest = hashlib.sha256(key.encode()).digest()
+    return np.random.default_rng(int.from_bytes(digest[:8], "little"))
 
 
 def _save(path: Path, arr: np.ndarray, meta: dict) -> None:
@@ -42,39 +70,45 @@ def _save(path: Path, arr: np.ndarray, meta: dict) -> None:
 
 
 def gen_gemv(name: str, N: int, K: int, fmt: str, M: int = 1) -> None:
-    """Write W (N x K, `fmt`), x (M x K, fp16), and the fp32 reference y (M x N).
+    """Write W (N x K, `fmt`), x (M x K, activation dtype for `fmt`), and the
+    fp32 reference y (M x N). The reference is computed from the EXACT bytes the
+    kernel sees (weights rounded/dequantized per format, activations in their
+    real dtype), so correctness reflects only kernel error, not input drift.
 
     y = W @ x^T semantics for weights stored N x K (transpose_b path):
-    ref[m, n] = sum_k Wf32[n, k] * xf32[m, k].
+    ref[m, n] = sum_k dequant(W)[n, k] * xf32[m, k].
     """
-    stem = INPUTS_DIR / f"gemv_{name}_{fmt}"
+    p = gemv_paths(name, fmt, M)
+    act_dt = ACT_DTYPE[fmt]
+    act_tag = p["act_tag"]
 
-    # Activations: fp16, shared across all formats for this shape.
-    xr = _rng("x", name, M, K)
-    x_f16 = xr.standard_normal((M, K)).astype(np.float16)
-    _save(stem.with_name(f"gemv_{name}_x").with_suffix(".bin"), x_f16,
-          {"tensor": "x", "shape": [M, K], "dtype": "float16"})
+    # Activations: dtype depends on the weight format's kernel. Shared across all
+    # formats with the same activation dtype for this (shape, M) (stable seed).
+    xr = _rng("x", name, M, K, act_tag)
+    x_act = xr.standard_normal((M, K)).astype(act_dt)
+    x_f32 = x_act.astype(np.float32)
+    _save(p["x"], x_act, {"tensor": "x", "shape": [M, K], "dtype": act_tag})
 
     wr = _rng("w", name, N, K)
-    if fmt == "fp16":
-        W_f16 = wr.standard_normal((N, K)).astype(np.float16)
-        W_f32 = W_f16.astype(np.float32)
-        _save(Path(f"{stem}_W.bin"), W_f16,
-              {"tensor": "W", "shape": [N, K], "dtype": "float16",
-               "format": "fp16"})
+    if fmt in ("fp16", "bf16"):
+        w_dt = np.float16 if fmt == "fp16" else ml_dtypes.bfloat16
+        W = wr.standard_normal((N, K)).astype(w_dt)
+        W_f32 = W.astype(np.float32)  # exact dequant of the stored low-precision W
+        _save(p["W"], W,
+              {"tensor": "W", "shape": [N, K], "dtype": fmt, "format": fmt})
     else:
         raise NotImplementedError(
-            f"format {fmt!r} not implemented yet (quant formats: Q4_0 next; "
-            f"see gguf-quant-formats skill for exact byte layout)")
+            f"format {fmt!r} not implemented yet (Q4_0 next; needs the exact "
+            f"GGUF byte layout — see gguf-quant-formats skill)")
 
-    # fp32 reference: cast activations to fp32, matmul in fp32.
-    ref = (x_f16.astype(np.float32) @ W_f32.T).astype(np.float32)  # (M, N)
-    _save(Path(f"{stem}_ref.bin"), ref,
+    ref = (x_f32 @ W_f32.T).astype(np.float32)  # (M, N)
+    _save(p["ref"], ref,
           {"tensor": "ref_y", "shape": [M, N], "dtype": "float32",
-           "format": fmt, "note": "fp32 y = x_f32 @ W_f32^T"})
+           "format": fmt, "activations": act_tag,
+           "note": "fp32 y = x_f32 @ dequant(W)_f32^T"})
 
-    print(f"wrote {stem}_W.bin  gemv_{name}_x.bin  {stem}_ref.bin  "
-          f"(N={N} K={K} M={M} fmt={fmt})")
+    print(f"wrote {p['W'].name}  {p['x'].name}  {p['ref'].name}  "
+          f"(N={N} K={K} M={M} fmt={fmt} acts={act_tag})")
 
 
 def main() -> int:

@@ -20,7 +20,11 @@ GEMV_SHAPES = [
 
 M_VALUES = [1, 8]
 
-WEIGHT_FORMATS = ["fp16", "Q8_0", "Q4_0", "Q4_K"]
+# Union of formats across implementations. Per-impl support (from the audit):
+#   MAX GPU: fp16, bf16, Q4_0   (no GPU Q8_0/Q4_K; fp16 M>1 -> cuBLAS)
+#   llama.cpp: Q8_0, Q4_0, Q4_K_M (+ fp16 via cuBLAS reference)
+# reports mark unsupported (impl, format) cells as N/A.
+WEIGHT_FORMATS = ["fp16", "bf16", "Q8_0", "Q4_0", "Q4_K"]
 
 # Decode attention: batch 1, one query token, KV from cache
 ATTN_SEQ_LENS = [1024, 4096, 16384]
