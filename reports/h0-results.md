@@ -1,19 +1,23 @@
 # H0 results — MAX kernels on consumer NVIDIA GPUs
 
-**Status: partial.** GEMV/matmul (fp16, bf16, Q4_0) and the measured roofline are
-done on the RTX 3090. Attention decode and the CUDA baselines (llama.cpp,
-FlashInfer, cuBLAS) are pending; this report is regenerated as they land.
+**Status: partial.** All MAX kernels (GEMV/matmul fp16/bf16/Q4_0, attention
+decode) and the measured roofline are done on the RTX 3090. The CUDA baselines
+(llama.cpp, FlashInfer, cuBLAS) are pending; this report is regenerated as they
+land.
 
 ## Result (so far)
 
 On the RTX 3090 (sm_86), MAX's dense decode GEMV is essentially at the memory
 bandwidth limit — fp16/bf16 M=1 reaches **87–98 % of the spec roofline** across
-all Llama-3-8B projection shapes — but MAX's **Q4_0 (4-bit) GPU matmul is not**:
-it runs at **6–15 % of roofline (~4× slower than the fp16 GEMV despite 3.5× less
-weight traffic)**, its tuned int4 configs do not even compile for GGUF Q4_0
-(group_size 32), and one shape (down_proj, K=14336) crashes outright. The dense
-path is fine; the 4-bit path is the gap. (The llama.cpp Q4_0 baseline, pending,
-will say how much of this is MAX-specific.)
+all Llama-3-8B projection shapes — and MAX's **attention decode** is also at the
+limit at long context (**86 % of spec / 99 % of measured roofline at seq 16384**;
+latency-bound at short context, as expected for the data volume). The one gap is
+MAX's **Q4_0 (4-bit) GPU matmul**: it runs at **6–15 % of roofline (~4× slower
+than the fp16 GEMV despite 3.5× less weight traffic)**, its tuned int4 configs do
+not even compile for GGUF Q4_0 (group_size 32), and one shape (down_proj,
+K=14336) crashes outright. The dense and attention paths are fine; the 4-bit path
+is the gap. (The llama.cpp Q4_0 baseline, pending, will say how much of this is
+MAX-specific.)
 
 ## Setup
 
@@ -89,6 +93,14 @@ results JSON.
 | max | Q4_0_M8_lm_head | M8 128256x4096 | 2114.68 | 2111.67 | 141 | 15.0 | 17.3 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M8-lm-head_sm-86_20260901T231443.json) |
 | max | bf16_M8_lm_head | M8 128256x4096 | 1289.65 | 1217.74 | 816 | 87.2 | 100.1 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M8-lm-head_sm-86_20260901T222455.json) |
 | max | fp16_M8_lm_head | M8 128256x4096 | 1264.90 | 1190.49 | 832 | 88.9 | 102.1 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M8-lm-head_sm-86_20260901T222445.json) |
+
+#### Attention decode
+
+| Impl | Variant | Shape | Median µs | min µs | GB/s | % spec | % meas | L2 err | Validated | JSON |
+|---|---|---|---|---|---|---|---|---|---|---|
+| max | fp16_gqa32x8_hd128_seq1024 | seq1024 gqa32x8 hd128 | 18.68 | 18.45 | 225 | 24.0 | 27.5 | 4.5e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq1024_sm-86_20260901T233654.json) |
+| max | fp16_gqa32x8_hd128_seq4096 | seq4096 gqa32x8 hd128 | 29.77 | 28.97 | 563 | 60.2 | 69.1 | 3.8e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq4096_sm-86_20260901T233659.json) |
+| max | fp16_gqa32x8_hd128_seq16384 | seq16384 gqa32x8 hd128 | 82.92 | 81.84 | 809 | 86.5 | 99.2 | 2.7e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq16384_sm-86_20260901T233703.json) |
 <!-- END GENERATED TABLES -->
 
 ## Reading the results
@@ -109,6 +121,13 @@ results JSON.
   so at decode M it is badly underutilized. Utilization improves with N (6 % at
   N=4096 → 15 % at N=128256) as the wide tile fills, but never approaches the
   bandwidth the same weights get in fp16.
+- **Attention decode: bandwidth-bound-optimal at long context.** seq 16384 hits
+  86.5 % of spec (99 % of measured roofline); seq 4096 is 60 %; seq 1024 is 24 %.
+  The short-context numbers are latency-bound, not a kernel deficiency — at seq
+  1024 only ~4 MiB of KV is read, too little to saturate 936 GB/s given the
+  split-K parallelism available (8 kv-heads × partitions across 82 SMs).
+  Validated against MAX's own `mha_gpu_naive` (L2 err ~5e-4). No gap here; the
+  audit's "decode is a real tensor-core flash-decoding kernel on sm_86" holds.
 
 ## Anomalies and caveats
 
@@ -145,5 +164,6 @@ group_size-32 config selection and the K=14336 crash. See the ranked gaps in
 uv run python -m bench.run_bw_probe --locked-clock 1695            # measured roofline
 scripts/sweep_gemv.sh 815.5 1695                                   # fp16/bf16 sweep
 uv run python -m bench.run_gemv_max --shape o_proj --fmt Q4_0 --M 1 --locked-clock 1695 --measured-gbps 815.5
+for s in 1024 4096 16384; do uv run python -m bench.run_attention_max --seq $s --locked-clock 1695 --measured-gbps 815.5; done
 uv run python -m bench.report                                      # regenerate tables
 ```

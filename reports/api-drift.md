@@ -67,6 +67,50 @@ the RTX 3090 (sm_86), Mojo 1.0.0 / max 26.5.0.
 - `ptr[i]` positional indexing → deprecated (wants `unsafe_offset=`); read into
   a `HostBuffer` and index that instead.
 
+## From bench/mojo/attn_max.mojo (MAX flash-decoding attention over paged KV)
+
+- Imports (verified): `from kv_cache.types import KVCacheStaticParams,
+  PagedKVCacheCollection`; `from nn.attention.gpu.mha import flash_attention,
+  mha_gpu_naive`; `from nn.attention.mha_mask import CausalMask`;
+  `from layout._utils import ManagedLayoutTensor`; `from layout._fillers import
+  random`; `from layout import Layout, LayoutTensor, RuntimeLayout,
+  UNKNOWN_VALUE`. All resolve under `-I modular/max/kernels/src`.
+- `PagedKVCacheCollection[dtype, kv_params, page_size](blocks, cache_lengths,
+  lookup_table, UInt32(max_prompt_length), UInt32(max_full_context_length))`.
+  `page_size` is a **comptime** param (3rd), not a ctor arg. Blocks tensor is 6D
+  `[num_paged_blocks, 2, num_layers, page_size, num_heads, head_size]`;
+  lookup_table is 2D `[batch_size, padded_lut_cols(num_pages)]` uint32.
+- `page_size` must be a multiple of 128 (>=128); production default is 256, we
+  use 128. `padded_lut_cols(cols) = ((cols+7)//8)*8 + 16` — the LUT row stride
+  must be a mult of 8 and >= cols+15 for `PagedKVCache.populate`'s SIMD path
+  (mirror of the test util / cache_manager.py; inlined, the util is not on the
+  `src` include path).
+- Flash-decoding call (decode path is just seq_len=1 per batch item, no separate
+  entry point): `flash_attention[ragged=True](output_lt, q_lt,
+  kv.get_key_cache(layer_idx), kv.get_value_cache(layer_idx), CausalMask(),
+  row_offsets_lt, scale, ctx)`. Q/output are LayoutTensor
+  `[total_q_rows, num_q_heads, head_size]`. `flash_attention` sets
+  `is_token_generation=True` internally when max_prompt_len==1 and dispatches
+  mha_decoding — no `decode=`/`token_generation=` flag to pass.
+- Naive reference (KVCacheT overload, mha.mojo:6922) validated against the SAME
+  paged cache: `mha_gpu_naive[ragged=True](q_lt, kv.get_key_cache(layer_idx),
+  kv.get_value_cache(layer_idx), CausalMask(), ref_output_lt, row_offsets_lt,
+  scale, batch_size, max_prompt_length, max_full_context_length, num_q_heads,
+  head_size, num_q_heads // kv_params.num_heads /*group*/, ctx)`. Note the
+  arg after `output` is `valid_length` but in `ragged=True` mode you pass the
+  **row_offsets** tensor there (as the upstream tests do).
+- **fp16 works unmodified** for flash_attention + mha_gpu_naive on sm_86
+  (RTX 3090); no bf16 fallback needed. L2 rel err flash-vs-naive ~4.5e-4 at
+  seq_len=1024, GQA 32/8, head_size 128.
+- `ManagedLayoutTensor[dtype, layout](RuntimeLayout[layout].row_major(
+  IndexList[N](dims...)), ctx)`. Fill host via `mt.tensor[update=False]()`
+  (no device read-back), pass `mt.device_tensor()` to kernels (default
+  `update=True` copies host->device + syncs), read results via `mt.tensor()`
+  (default `update=True` copies device->host + syncs). Element access on the
+  returned LayoutTensor (`t[i,j,k]`) yields a SIMD with a symbolic length —
+  index `[0]` to get a scalar before `.cast[...]()` (a bare `Float32(...)`
+  conversion fails: "SIMDLength(Layout(...).size()) vs SIMDLength(1)").
+
 ## From bench/mojo/qgemv_max.mojo (MAX int4 / Q4_0 quantized matmul)
 
 - Two-step API in `quantization.qmatmul_gpu`: repack raw GGUF Q4_0 bytes ONCE,

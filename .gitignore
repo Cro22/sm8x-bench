@@ -14,6 +14,7 @@ build/
 # compiled Mojo entry-point binaries (built from bench/mojo/*.mojo)
 bench/mojo/gemv_max
 bench/mojo/qgemv_max
+bench/mojo/attn_max
 bench/mojo/*_bin
 
 # Local baselines source/build trees (large; rebuilt from pinned SHAs)
