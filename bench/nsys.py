@@ -43,8 +43,14 @@ def kernel_summary(cmd: list[str], cwd: Path | str | None = None,
     not depend on how --stats output interleaves with the program's stdout."""
     with tempfile.TemporaryDirectory() as td:
         rep = Path(td) / "prof"
+        # CUDA-only trace, no CPU sampling / context-switch tracing. On WSL the
+        # default full trace makes nsys hang/crawl for minutes in teardown; with
+        # these flags a profile completes in ~2 s. We only need GPU kernel
+        # durations anyway.
         proc = subprocess.run(
-            ["nsys", "profile", "--force-overwrite=true", "-o", str(rep), *cmd],
+            ["nsys", "profile", "--force-overwrite=true",
+             "--trace=cuda", "--sample=none", "--cpuctxsw=none",
+             "-o", str(rep), *cmd],
             capture_output=True, text=True, cwd=str(cwd) if cwd else None,
             timeout=timeout,
         )

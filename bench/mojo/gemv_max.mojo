@@ -29,8 +29,12 @@ from std.sys import has_accelerator
 from std.sys.arg import argv
 
 comptime WARMUP = 10
-comptime SAMPLES = 30
-comptime TARGET_BATCH_US = 5000.0  # >= 5 ms per timed batch
+# Fixed, modest launch budget: SAMPLES*PER_BATCH kernel instances — enough for
+# stable nsys per-kernel stats, small enough that nsys report generation stays
+# fast. nsys per-kernel duration is the authoritative timing; the wall-clock
+# printed here is a secondary (dispatch-inclusive) sanity number.
+comptime SAMPLES = 12
+comptime PER_BATCH = 10
 
 
 def run[dt: DType](
@@ -113,22 +117,13 @@ def run[dt: DType](
             launch(ctx)
         ctx.synchronize()
 
-        # ---- Auto-calibrate launches/batch so one batch >= TARGET_BATCH_US. ----
-        var calib_ns = Float64(ctx.execution_time[launch](8))
-        var one_us = (calib_ns / 8.0) / 1000.0
-        var launches = Int(TARGET_BATCH_US / one_us) + 1 if one_us > 0 else 64
-        if launches < 1:
-            launches = 1
-        if launches > 2000:
-            launches = 2000
-
-        # ---- 30 timed samples. ----
+        # ---- Timed samples (fixed budget; wall-clock is secondary to nsys). ----
         var samples = List[Float64]()
         for _ in range(SAMPLES):
-            var total_ns = Float64(ctx.execution_time[launch](launches))
-            samples.append((total_ns / Float64(launches)) / 1000.0)
+            var total_ns = Float64(ctx.execution_time[launch](PER_BATCH))
+            samples.append((total_ns / Float64(PER_BATCH)) / 1000.0)
 
-        print("launches_per_sample=", launches)
+        print("launches_per_sample=", PER_BATCH)
         var line = String("samples_us= ")
         for i in range(len(samples)):
             if i > 0:
