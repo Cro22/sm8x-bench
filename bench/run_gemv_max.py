@@ -26,18 +26,20 @@ from bench.results_io import write_result
 
 ENTRY = Path(__file__).resolve().parent / "mojo" / "gemv_max.mojo"
 BINARY = Path(__file__).resolve().parent / "mojo" / "gemv_max"
+QENTRY = Path(__file__).resolve().parent / "mojo" / "qgemv_max.mojo"
+QBINARY = Path(__file__).resolve().parent / "mojo" / "qgemv_max"
 _REPO = Path(__file__).resolve().parent.parent
 
 
-def ensure_built() -> None:
+def ensure_built(entry: Path, binary: Path) -> None:
     """Build the entry to a binary once (rebuild if the source is newer), so
     nsys runs don't pay ~60 s of Mojo recompile per config."""
-    if BINARY.exists() and BINARY.stat().st_mtime >= ENTRY.stat().st_mtime:
+    if binary.exists() and binary.stat().st_mtime >= entry.stat().st_mtime:
         return
-    print("building gemv_max ...")
+    print(f"building {binary.name} ...")
     r = subprocess.run(
         ["mojo", "build", "-I", "modular/max/kernels/src",
-         str(ENTRY), "-o", str(BINARY)],
+         str(entry), "-o", str(binary)],
         cwd=str(_REPO), capture_output=True, text=True,
     )
     if r.returncode != 0:
@@ -71,14 +73,23 @@ def main() -> int:
         print(f"generating inputs for {args.shape} {args.fmt} M{M} ...")
         reference.gen_gemv(args.shape, N, K, args.fmt, M=M)
 
-    ensure_built()
-    # Per-path correctness tolerance (mojo-gpu-kernel skill): M=1 GEMV accumulates
-    # in fp32 -> rtol 1e-2; the M>1 GEMM path (cuBLAS fp16 uses fp16 accumulation;
-    # bf16 GEMM) needs the looser fp16-accum row rtol 3e-2 / atol 5e-3.
-    rtol, atol = ("1e-2", "1e-3") if M == 1 else ("3e-2", "5e-3")
-    cmd = [str(BINARY), str(M), str(N), str(K), args.fmt,
-           str(p["W"]), str(p["x"]), str(p["ref"]), rtol, atol]
-    print(f"profiling under nsys: {args.shape} {args.fmt} M{M} (tol rtol={rtol}) ...")
+    # Select the entry: Q4_0 uses the int4 quant path (qgemv_max); fp16/bf16 use
+    # the dense path (gemv_max). Per-path L2 tolerance: M=1 dense fp32-accum 1e-2;
+    # M>1 dense (fp16 accum) 3e-2; Q4_0 is lossy 4-bit -> 3e-2.
+    if args.fmt == "Q4_0":
+        # qgemv_max argv: M N K W x ref [rtol] [atol]  (format is always Q4_0)
+        entry, binary = QENTRY, QBINARY
+        rtol, atol = "3e-2", "5e-3"
+        cmd = [str(binary), str(M), str(N), str(K),
+               str(p["W"]), str(p["x"]), str(p["ref"]), rtol, atol]
+    else:
+        # gemv_max argv: M N K fmt W x ref [rtol] [atol]
+        entry, binary = ENTRY, BINARY
+        rtol, atol = ("1e-2", "1e-3") if M == 1 else ("3e-2", "5e-3")
+        cmd = [str(binary), str(M), str(N), str(K), args.fmt,
+               str(p["W"]), str(p["x"]), str(p["ref"]), rtol, atol]
+    ensure_built(entry, binary)
+    print(f"profiling under nsys: {args.shape} {args.fmt} M{M} (tol L2<{rtol}) ...")
     rows = nsys.kernel_summary(cmd, cwd=_REPO)
     meta = rows[0]
     out = meta.get("__stdout__", "")

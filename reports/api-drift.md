@@ -66,3 +66,44 @@ the RTX 3090 (sm_86), Mojo 1.0.0 / max 26.5.0.
 - `ref` is a reserved keyword (origin syntax) — cannot be a variable name.
 - `ptr[i]` positional indexing → deprecated (wants `unsafe_offset=`); read into
   a `HostBuffer` and index that instead.
+
+## From bench/mojo/qgemv_max.mojo (MAX int4 / Q4_0 quantized matmul)
+
+- Two-step API in `quantization.qmatmul_gpu`: repack raw GGUF Q4_0 bytes ONCE,
+  then matmul. `from quantization.qmatmul_gpu import gpu_qint4_repack_Q4_0,
+  multistage_gemm_q` and `from linalg.utils_gpu import MatmulConfig`.
+- Both operands of `gpu_qint4_repack_Q4_0[target="gpu"](b_raw_tt, b_packed_tt,
+  ctx)` are rank-2 **uint8** TileTensors and must have **STATIC** shapes: the
+  kernel reads `comptime N = Int(b.layout.shape[0])` / `K` from the layout for
+  grid geometry and the packed layout. Build them with `Idx[...]`:
+  `TileTensor(buf, row_major(Coord(Idx[N], Idx[(K//32)*18])))` for the raw
+  weights and `Coord(Idx[N], Idx[(K*9)//16])` for the packed output.
+- Shapes/bytes (group_size=32, 18 B/32-weight block): raw Q4_0 =
+  `N*(K//32)*18` bytes, shaped `[N, (K//32)*18]`; packed = `N*K//2` (4-bit
+  weights) + `N*(K//32)*2` (bf16 scales) = `N*K*9//16` bytes, shaped
+  `[N, (K*9)//16]`. For K%32==0 both are integers. (These two byte totals are
+  equal because 18/32 == 9/16.)
+- The quantized GEMM kernel (`multistage_qgemm_kernel`) derives **N and K at
+  comptime from the packed-B layout** (not from A/C), so N and K must be static
+  on B. M is read at runtime (`c.dim[0]()`), so A=[M,K] and C=[M,N] may keep M
+  dynamic but need static K/N: `row_major(Coord(M, Idx[K]))` /
+  `row_major(Coord(M, Idx[N]))`. A and C are **bfloat16** (asserted); B uint8.
+- BUG/LIMITATION (upstream, verified on sm_86, max 26.5.0): the public
+  `matmul_gpu_qint4[group_size=32, target="gpu"](c, a, b, ctx)` wrapper is
+  UNUSABLE for Q4_0 (group_size=32) with static N/K. Its per-shape tuned
+  configs for e.g. static 4096x4096, m<=32 use `block_tile_shape[2]` (BK) = 128;
+  inside the kernel `group_size // BK == 32 // 128 == 0` yields a zero-sized
+  scales layout dimension and a **comptime failure** ("address is out-of-bounds"
+  in `int_tuple.__getitem__`). Those configs were tuned for group_size=128.
+  Passing fully-dynamic A/C to dodge the dispatch instead compiles but produces
+  GARBAGE (L2 rel err ~0.99) AND then fails the "Layout must be fully static"
+  constraint on B. WORKAROUND that PASSES (L2 rel err 3.8e-3): call
+  `multistage_gemm_q[group_size=32, pack_factor=8, config=cfg](c_lt, a_lt, b_lt,
+  cfg, ctx)` directly (operands via `.to_layout_tensor()`) with a BK=32 config
+  == the wrapper's own `default_config` (block 128x128x32, warp 64x64x32,
+  stages=5, k_part=1, warp_k_part=1). This is the config the wrapper falls back
+  to for non-tuned shapes; selecting it explicitly is the only working Q4_0 path.
+- Consequence for the audit: on sm_86 the only WORKING Q4_0 matmul config at M=1
+  is a 128x128 GEMM tile (no M=1 GEMV specialization — the m<=16 M16 config is
+  the broken BK=128 one), so decode-shape Q4_0 runs badly underutilized. See
+  bench/results and reports/open-questions.md.

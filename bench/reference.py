@@ -96,10 +96,27 @@ def gen_gemv(name: str, N: int, K: int, fmt: str, M: int = 1) -> None:
         W_f32 = W.astype(np.float32)  # exact dequant of the stored low-precision W
         _save(p["W"], W,
               {"tensor": "W", "shape": [N, K], "dtype": fmt, "format": fmt})
+    elif fmt == "Q4_0":
+        # Quantize a random fp32 weight to GGUF Q4_0 (exact ggml layout), store
+        # the raw block bytes, and use the DEQUANTIZED weight as the reference
+        # basis (that is what the fused-dequant kernel effectively multiplies).
+        # 18 B / 32-weight block; MAX repacks these internally (repack_Q4_0).
+        from gguf.quants import quantize, dequantize
+        from gguf.constants import GGMLQuantizationType as GT
+
+        assert K % 32 == 0, "Q4_0 needs K % 32 == 0"
+        W_src = wr.standard_normal((N, K)).astype(np.float32)
+        qbytes = quantize(W_src, GT.Q4_0)              # (N, K//32*18) uint8
+        W_f32 = dequantize(qbytes, GT.Q4_0).astype(np.float32)
+        _save(p["W"], qbytes,
+              {"tensor": "W", "shape": [N, K], "dtype": "uint8", "format": "Q4_0",
+               "block": 32, "bytes_per_block": 18,
+               "raw_shape": list(qbytes.shape),
+               "note": "raw GGUF Q4_0 blocks; MAX repacks internally"})
     else:
         raise NotImplementedError(
-            f"format {fmt!r} not implemented yet (Q4_0 next; needs the exact "
-            f"GGUF byte layout — see gguf-quant-formats skill)")
+            f"format {fmt!r} not implemented on GPU by MAX (Q8_0/Q4_K are "
+            f"CPU-only upstream; see reports/audit.md)")
 
     ref = (x_f32 @ W_f32.T).astype(np.float32)  # (M, N)
     _save(p["ref"], ref,

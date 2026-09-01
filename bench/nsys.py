@@ -96,27 +96,34 @@ def kernel_summary(cmd: list[str], cwd: Path | str | None = None,
 
 
 def per_invocation_us(rows: list[dict]) -> dict:
-    """Collapse kernel rows into the per-matmul/op kernel time in microseconds.
+    """Collapse kernel rows into the per-op kernel time in microseconds.
 
-    Assumes each distinct kernel fires once per op (true for gemv[/+reduce],
-    gemm, qgemm, mha_decoding[/+splitk_reduce]). per-op time = sum over kernels
-    of their per-instance time. Returns avg/med/min us + the kernel list and a
-    warning if instance counts differ (hinting a kernel fires !=1x per op)."""
+    The profiled run launches the timed op N times but also, once, any SETUP
+    kernels (e.g. the Q4_0 weight repack). Per-op kernels all share the same high
+    instance count (= number of launches); one-time setup kernels have a much
+    smaller count. We keep only the per-op kernels (instances >= half the max
+    count) and sum their per-instance time; setup kernels are excluded.
+    (gemv[/+reduce], gemm, qgemm[/+splitk_reduce] all fire once per op.)"""
     kernels = [r for r in rows if "name" in r]
     if not kernels:
         return {"avg_us": None, "med_us": None, "min_us": None,
-                "kernels": [], "warning": "no GPU kernels found in nsys output"}
-    counts = {k["instances"] for k in kernels}
+                "kernels": [], "excluded": [], "warning": "no GPU kernels found"}
+    max_count = max(k["instances"] for k in kernels)
+    per_op = [k for k in kernels if k["instances"] >= max_count / 2]
+    setup = [k for k in kernels if k["instances"] < max_count / 2]
+    counts = {k["instances"] for k in per_op}
     warn = ""
     if len(counts) > 1:
-        warn = (f"kernel instance counts differ {sorted(counts)} — a kernel may "
-                f"fire !=1x per op; per-op sum may be approximate")
-    avg = sum(k["avg_ns"] for k in kernels) / 1000.0
-    med = sum(k["med_ns"] for k in kernels) / 1000.0
-    mn = sum(k["min_ns"] for k in kernels) / 1000.0
+        warn = (f"per-op kernel instance counts differ {sorted(counts)} — a "
+                f"kernel may fire !=1x per op; per-op sum may be approximate")
+    avg = sum(k["avg_ns"] for k in per_op) / 1000.0
+    med = sum(k["med_ns"] for k in per_op) / 1000.0
+    mn = sum(k["min_ns"] for k in per_op) / 1000.0
     return {
         "avg_us": round(avg, 4), "med_us": round(med, 4), "min_us": round(mn, 4),
         "kernels": [{"name": k["name"], "instances": k["instances"],
-                     "avg_us": round(k["avg_ns"] / 1000.0, 4)} for k in kernels],
+                     "avg_us": round(k["avg_ns"] / 1000.0, 4)} for k in per_op],
+        "excluded": [{"name": k["name"], "instances": k["instances"],
+                      "avg_us": round(k["avg_ns"] / 1000.0, 4)} for k in setup],
         "warning": warn,
     }
