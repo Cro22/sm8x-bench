@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "impl": "ours",
+  "kernel": "gemv",
+  "variant": "Q4_0_M1_gate_up",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 3090",
+    "arch": "sm_86",
+    "compute_capability": "8.6",
+    "sms": 82,
+    "driver": "610.62",
+    "cuda_driver_version": "13.3",
+    "graphics_clock_mhz_current": 1800,
+    "graphics_clock_mhz_max": 2100,
+    "graphics_clock_mhz_locked": 1695,
+    "mem_clock_mhz": 9751,
+    "mem_clock_mhz_max": 9751,
+    "mem_clock_locked": false,
+    "power_limit_w": 420.0
+  },
+  "shape": {
+    "M": 1,
+    "N": 28672,
+    "K": 4096
+  },
+  "dtype": {
+    "weights": "Q4_0",
+    "activations": "bf16",
+    "accum": "fp32"
+  },
+  "bytes_moved": 66125824,
+  "flops": 234881024,
+  "timing": {
+    "source": "nsys_gpukernsum",
+    "n_instances": 262,
+    "launches_per_sample": 0,
+    "median_us": 81.869,
+    "q1_us": 0,
+    "q3_us": 0,
+    "min_us": 81.317,
+    "p95_us": 0,
+    "nsys_mean_us": 82.1359,
+    "harness_wallclock_median_us": 84.69,
+    "kernels": [
+      {
+        "name": "q4_0_gemv_q4_0_gemv_kernel_SI6A6AcB6A6A_f3fc7b40d8a95e13",
+        "instances": 131,
+        "avg_us": 80.1642
+      },
+      {
+        "name": "q4_0_gemv_quantize_x_q8_1_SIM6A6AcB6A6A_cc3af2d569ecc85a",
+        "instances": 131,
+        "avg_us": 1.9717
+      }
+    ]
+  },
+  "achieved_gbps": 807.7,
+  "achieved_tflops": 2.869,
+  "roofline": {
+    "spec_gbps": 936.0,
+    "measured_gbps": 815.5,
+    "pct_spec": 86.3,
+    "pct_measured": 99.0
+  },
+  "correctness": {
+    "validated": true,
+    "l2_rel_err": 0.005462612,
+    "max_abs_err": 1.407999,
+    "max_rel_err": 285.29227,
+    "tolerance": "l2_rel<3e-2 (vs fp32 dequant ref)"
+  },
+  "env": {
+    "mojo_version": "1.0.0",
+    "max_version": "26.5.0",
+    "modular_sha": "b4497b7ce9ba96331c72c637ad41b44bab374f33",
+    "cuda_version": "13.3",
+    "llamacpp_sha": "",
+    "flashinfer_version": "unknown",
+    "harness_sha": "b02157723eb82dd2ce93125e1ff66bccf6a75f9c-dirty",
+    "timestamp_utc": "2026-09-02T00:47:23.178800+00:00"
+  },
+  "notes": "our Q4_0 GEMV; nsys kernel(s): q4_0_gemv_q4_0_gemv_kernel_SI6A6AcB6A6A_f3fc7b40d8a95e13, q4_0_gemv_quantize_x_q8_1_SIM6A6AcB6A6A_cc3af2d569ecc85a. bf16 activations. harness wall-clock median 84.69 us. "
+}

@@ -188,3 +188,24 @@ the RTX 3090 (sm_86), Mojo 1.0.0 / max 26.5.0.
   is a 128x128 GEMM tile (no M=1 GEMV specialization — the m<=16 M16 config is
   the broken BK=128 one), so decode-shape Q4_0 runs badly underutilized. See
   bench/results and reports/open-questions.md.
+
+## H0+ / our Q4_0 GEMV DP4A kernel (Mojo 1.0.0, ed45d567)
+
+Facts verified against the installed stdlib while writing kernels/q4_0_gemv.mojo
+(not drift per se, but non-obvious current API for GPU kernels):
+
+- Shared memory: `unsafe_stack_allocation[count, T, address_space=AddressSpace.SHARED]()`
+  from `std.memory`; `AddressSpace` is in `std.memory.address_space`.
+- Block barrier: `from max.gpu.sync import barrier` (NOT in std.gpu). `std.gpu`
+  has no `barrier`/`syncthreads`.
+- Warp reductions: `std.gpu.primitives.warp` exposes `sum`, `max`, `min`,
+  `broadcast`, `shuffle_*` taking `SIMD` values (e.g. `warp.max(abs(xf))`).
+- Vector global loads: `ptr.unsafe_load[width=W, alignment=A](offset)` returns
+  `SIMD[dtype, W]`; pass `alignment` explicitly for under-aligned data (Q4_0
+  nibble bytes start at a 2-aligned offset -> `alignment=2` for a 16-byte load).
+- SIMD reinterpret across widths: `from std.memory import bitcast`;
+  `bitcast[DType.int32, 4](simd_u8x16)` repacks 16 uint8 lanes into 4 int32.
+- No DP4A / dot-product intrinsic in the stdlib GPU package (only ARM neon
+  `has_neon_int8_dotprod`). Emit it with inline PTX via
+  `std.sys.inlined_assembly["dp4a.s32.s32 $0,$1,$2,$3;", Int32,
+  constraints="=r,r,r,r", has_side_effect=False](a,b,c)`. This works on sm_86.

@@ -16,7 +16,12 @@
 #   ref_path: reference y, float32, [1, N]  (= x_f32 @ dequant(W)_f32^T)
 # ===----------------------------------------------------------------------=== #
 
-from q4_0_gemv import q4_0_gemv_kernel, GROUP_SIZE, GROUP_BYTES
+from q4_0_gemv import (
+    q4_0_gemv_kernel,
+    quantize_x_q8_1,
+    GROUP_SIZE,
+    GROUP_BYTES,
+)
 from std.gpu.globals import WARP_SIZE
 from max.gpu.host import DeviceContext
 from std.memory import unsafe_memcpy
@@ -26,7 +31,7 @@ from std.sys.arg import argv
 comptime WARMUP = 10
 comptime SAMPLES = 12
 comptime PER_BATCH = 10
-comptime ROWS_PER_BLOCK = 2  # best of {1,2,4,8,16} sweep on o_proj M=1
+comptime ROWS_PER_BLOCK = 1  # best of {1,2,4,8} sweep for the DP4A kernel
 
 
 def median_of(list: List[Float64]) -> Float64:
@@ -78,9 +83,14 @@ def run[
                           count=N)
 
         # ---- Device buffers; upload once (NOT timed). ----
+        comptime NBLOCKS = K // GROUP_SIZE
         var w_dev = ctx.enqueue_create_buffer[DType.uint8](raw_bytes)
         var x_dev = ctx.enqueue_create_buffer[DType.bfloat16](K)
         var y_dev = ctx.enqueue_create_buffer[DType.float32](N)
+        # Q8_1 activation scratch (reused every launch; part of the timed work).
+        var q8_dev = ctx.enqueue_create_buffer[DType.int8](K)
+        var xd_dev = ctx.enqueue_create_buffer[DType.float32](NBLOCKS)
+        var xs_dev = ctx.enqueue_create_buffer[DType.float32](NBLOCKS)
         ctx.enqueue_copy(w_dev, w_host)
         ctx.enqueue_copy(x_dev, x_host)
         y_dev.enqueue_fill(0)
@@ -89,17 +99,28 @@ def run[
         var w_ptr = w_dev.unsafe_ptr()
         var x_ptr = x_dev.unsafe_ptr()
         var y_ptr = y_dev.unsafe_ptr()
+        var q8_ptr = q8_dev.unsafe_ptr()
+        var xd_ptr = xd_dev.unsafe_ptr()
+        var xs_ptr = xs_dev.unsafe_ptr()
 
         comptime BLOCK = WARP_SIZE * ROWS_PER_BLOCK
         comptime GRID = (N + ROWS_PER_BLOCK - 1) // ROWS_PER_BLOCK
+        comptime QUANT_BLOCK = 128  # one warp per 32-elem block -> K threads
+        comptime QUANT_GRID = (K + QUANT_BLOCK - 1) // QUANT_BLOCK
 
         @parameter
         @always_inline
-        @__copy_capture(w_ptr, x_ptr, y_ptr)
+        @__copy_capture(w_ptr, x_ptr, y_ptr, q8_ptr, xd_ptr, xs_ptr)
         def launch(ctx: DeviceContext) raises:
+            # 1) quantize x -> Q8_1 (once, reused across all N rows).
+            ctx.enqueue_function[quantize_x_q8_1[K]](
+                q8_ptr, xd_ptr, xs_ptr, x_ptr,
+                grid_dim=QUANT_GRID, block_dim=QUANT_BLOCK)
+            # 2) Q4_0 . Q8_1 DP4A GEMV.
             ctx.enqueue_function[
                 q4_0_gemv_kernel[N, K, ROWS_PER_BLOCK]
-            ](y_ptr, w_ptr, x_ptr, grid_dim=GRID, block_dim=BLOCK)
+            ](y_ptr, w_ptr, q8_ptr, xd_ptr, xs_ptr,
+              grid_dim=GRID, block_dim=BLOCK)
 
         # ---- Correctness: one launch, compare output to fp32 ref. ----
         launch(ctx)

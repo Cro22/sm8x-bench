@@ -31,7 +31,12 @@ _SAMPLES = re.compile(r"samples_us=\s*([\d.,eE+\- ]+)")
 
 
 def ensure_built() -> None:
-    if BINARY.exists() and BINARY.stat().st_mtime >= ENTRY.stat().st_mtime:
+    # Rebuild if EITHER the entry OR any imported kernel source is newer than the
+    # binary. (Previously only ENTRY was checked, so kernel-only edits were
+    # silently measured against a stale binary.)
+    srcs = [ENTRY, *(_REPO / "kernels").glob("*.mojo")]
+    newest_src = max(s.stat().st_mtime for s in srcs if s.exists())
+    if BINARY.exists() and BINARY.stat().st_mtime >= newest_src:
         return
     print("building q4_0_gemv_ours ...")
     r = subprocess.run(["mojo", "build", "-I", "kernels", str(ENTRY),
