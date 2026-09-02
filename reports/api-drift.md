@@ -67,6 +67,43 @@ the RTX 3090 (sm_86), Mojo 1.0.0 / max 26.5.0.
 - `ptr[i]` positional indexing → deprecated (wants `unsafe_offset=`); read into
   a `HostBuffer` and index that instead.
 
+## From kernels/q4_0_gemv.mojo (OUR OWN raw Q4_0 GEMV GPU kernel)
+
+- `Pointer` (the type a `DeviceBuffer` arrives as in a kernel, e.g.
+  `Pointer[UInt8, MutAnyOrigin]`) has **no `.offset(i)` method** (compile error
+  "value has no attribute 'offset'"). To read a differently-typed scalar at a
+  byte offset, bitcast the WHOLE pointer and index in the target dtype's units:
+  `w.unsafe_bitcast[Scalar[DType.float16]]().unsafe_load(byte_off // 2)`
+  (byte_off must be a multiple of 2; here every Q4_0 block starts on an even
+  byte). Load/store on a raw `Pointer`: `p.unsafe_load(i)` (optionally
+  `unsafe_load[width=W](i)` for a vector) and `p.unsafe_store(i, val)`.
+- Get the kernel-side pointer from a device buffer with `buf.unsafe_ptr()`; pass
+  it as a kernel arg and capture it in the timing closure via `@__copy_capture`.
+- fp16 bit-reinterpret of raw GGUF scale bytes: the above pointer-bitcast +
+  `.cast[DType.float32]()` is the whole recipe — no manual byte assembly needed
+  since block offsets are 2-aligned. bf16 activations: `x.unsafe_load(i).cast[
+  DType.float32]()`.
+- Nibble extraction on `UInt8`: `byte & UInt8(0x0F)` (low), `byte >> 4` (high).
+  The `>> 4` on a `UInt8` yields the high nibble directly (no mask needed).
+- `warp.sum(acc)` (`from std.gpu.primitives import warp`) reduces a per-lane
+  fp32 across the 32 lanes; every lane gets the total, so guard the store with
+  `if lane == 0`. `WARP_SIZE` from `std.gpu.globals`.
+- Parametric GPU kernel launch: define `def k[N: Int, K: Int, RPB: Int](...)`
+  with `from std.gpu import thread_idx, block_idx, block_dim` and launch the
+  fully-specialized function object:
+  `ctx.enqueue_function[k[N, K, RPB]](args, grid_dim=G, block_dim=B)`. `grid_dim`
+  and `block_dim` are plain `Int`s (comptime here). One warp per output row:
+  `block_dim = WARP_SIZE * RPB`, `grid_dim = ceildiv(N, RPB)`, row =
+  `block_idx.x * RPB + thread_idx.x // WARP_SIZE`.
+- Importing our own kernel module: `uv run mojo build <entry>.mojo -I kernels`
+  puts `kernels/` on the import path so `from q4_0_gemv import ...` resolves.
+  (The "no -I" note only applies to NOT needing `modular/max/kernels/src`.)
+- Perf note (sm_86, RTX 3090): 1-warp-per-row, 1-byte-per-lane-per-block Q4_0
+  GEMV at 4096x4096 M=1 gives ~32 us (296 GB/s, 32% of 936 spec) at
+  ROWS_PER_BLOCK=2; the sweep {1,2,4,8,16} spans 32-38 us (RPB=2 best). vs
+  llama.cpp ~17 us and MAX ~166 us. Correctness L2 rel err 3.3e-7 (exact,
+  same dequant as the ref).
+
 ## From bench/mojo/attn_max.mojo (MAX flash-decoding attention over paged KV)
 
 - Imports (verified): `from kv_cache.types import KVCacheStaticParams,

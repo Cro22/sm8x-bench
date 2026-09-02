@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "impl": "ours",
+  "kernel": "gemv",
+  "variant": "Q4_0_M1_o_proj",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 3090",
+    "arch": "sm_86",
+    "compute_capability": "8.6",
+    "sms": 82,
+    "driver": "610.62",
+    "cuda_driver_version": "13.3",
+    "graphics_clock_mhz_current": 1695,
+    "graphics_clock_mhz_max": 2100,
+    "graphics_clock_mhz_locked": 1695,
+    "mem_clock_mhz": 9951,
+    "mem_clock_mhz_max": 9751,
+    "mem_clock_locked": false,
+    "power_limit_w": 420.0
+  },
+  "shape": {
+    "M": 1,
+    "N": 4096,
+    "K": 4096
+  },
+  "dtype": {
+    "weights": "Q4_0",
+    "activations": "bf16",
+    "accum": "fp32"
+  },
+  "bytes_moved": 9453568,
+  "flops": 33554432,
+  "timing": {
+    "source": "nsys_gpukernsum",
+    "n_instances": 131,
+    "launches_per_sample": 0,
+    "median_us": 30.153,
+    "q1_us": 0,
+    "q3_us": 0,
+    "min_us": 29.74,
+    "p95_us": 0,
+    "nsys_mean_us": 30.156,
+    "harness_wallclock_median_us": 32.296,
+    "kernels": [
+      {
+        "name": "q4_0_gemv_q4_0_gemv_kernel_SI6A6AcB6A6A_c27bfcacac7bb141",
+        "instances": 131,
+        "avg_us": 30.156
+      }
+    ]
+  },
+  "achieved_gbps": 313.52,
+  "achieved_tflops": 1.113,
+  "roofline": {
+    "spec_gbps": 936.0,
+    "measured_gbps": 815.5,
+    "pct_spec": 33.5,
+    "pct_measured": 38.4
+  },
+  "correctness": {
+    "validated": true,
+    "l2_rel_err": 3.3032597e-07,
+    "max_abs_err": 9.1552734e-05,
+    "max_rel_err": 0.0005924155,
+    "tolerance": "l2_rel<3e-2 (vs fp32 dequant ref)"
+  },
+  "env": {
+    "mojo_version": "1.0.0",
+    "max_version": "26.5.0",
+    "modular_sha": "b4497b7ce9ba96331c72c637ad41b44bab374f33",
+    "cuda_version": "13.3",
+    "llamacpp_sha": "",
+    "flashinfer_version": "unknown",
+    "harness_sha": "10d92ffc1092dfbcbeef5472700f2b0324500872-dirty",
+    "timestamp_utc": "2026-09-02T00:12:42.018250+00:00"
+  },
+  "notes": "our Q4_0 GEMV; nsys kernel(s): q4_0_gemv_q4_0_gemv_kernel_SI6A6AcB6A6A_c27bfcacac7bb141. bf16 activations. harness wall-clock median 32.296 us. "
+}
