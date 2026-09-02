@@ -121,6 +121,7 @@ def main() -> int:
                      "tolerance": "l2_rel<2e-2 (vs mha_gpu_naive)"},
         graphics_clock_mhz_locked=args.locked_clock,
         mem_clock_locked=False,
+        observed_sm_clock=meta.get("__sm_clock_mhz__"),
         measured_gbps=args.measured_gbps,
         notes=note,
         gpu_index=args.gpu_index,

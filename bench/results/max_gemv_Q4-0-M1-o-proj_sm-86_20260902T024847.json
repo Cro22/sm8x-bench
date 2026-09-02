@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "impl": "max",
+  "kernel": "gemv",
+  "variant": "Q4_0_M1_o_proj",
+  "status": "compile_fail",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 3090",
+    "arch": "sm_86",
+    "compute_capability": "8.6",
+    "sms": 82,
+    "driver": "610.62",
+    "cuda_driver_version": "13.3",
+    "graphics_clock_mhz_current": 1695,
+    "graphics_clock_mhz_max": 2100,
+    "graphics_clock_mhz_locked": null,
+    "mem_clock_mhz": 810,
+    "mem_clock_mhz_max": 9751,
+    "mem_clock_locked": false,
+    "power_limit_w": 420.0
+  },
+  "shape": {
+    "M": 1,
+    "N": 4096,
+    "K": 4096
+  },
+  "dtype": {},
+  "bytes_moved": null,
+  "flops": null,
+  "timing": {
+    "median_us": null
+  },
+  "achieved_gbps": null,
+  "achieved_tflops": null,
+  "roofline": {
+    "spec_gbps": null,
+    "measured_gbps": null,
+    "pct_spec": null,
+    "pct_measured": null
+  },
+  "correctness": {
+    "validated": false
+  },
+  "env": {
+    "mojo_version": "1.0.0",
+    "max_version": "26.5.0",
+    "modular_sha": "b4497b7ce9ba96331c72c637ad41b44bab374f33",
+    "cuda_version": "13.3",
+    "llamacpp_sha": "",
+    "flashinfer_version": "unknown",
+    "harness_sha": "87cf13a80db748d553022b625098aefbfbe33699",
+    "timestamp_utc": "2026-09-02T02:48:47.279526+00:00"
+  },
+  "notes": "matmul_gpu_qint4[g32] real dispatch does not compile: build failed"
+}

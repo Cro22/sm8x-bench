@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "impl": "max",
+  "kernel": "gemv",
+  "variant": "Q4_0_M1_gate_up",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 3090",
+    "arch": "sm_86",
+    "compute_capability": "8.6",
+    "sms": 82,
+    "driver": "610.62",
+    "cuda_driver_version": "13.3",
+    "graphics_clock_mhz_current": 1695,
+    "graphics_clock_mhz_max": 2100,
+    "graphics_clock_mhz_locked": 1695,
+    "mem_clock_mhz": 810,
+    "mem_clock_mhz_max": 9751,
+    "mem_clock_locked": false,
+    "power_limit_w": 420.0,
+    "graphics_clock_mhz_observed": {
+      "min": 1695,
+      "max": 1695,
+      "median": 1695,
+      "n": 73
+    }
+  },
+  "shape": {
+    "M": 1,
+    "N": 28672,
+    "K": 4096
+  },
+  "dtype": {
+    "weights": "Q4_0",
+    "activations": "bf16",
+    "accum": "fp32"
+  },
+  "bytes_moved": 66125824,
+  "flops": 234881024,
+  "timing": {
+    "source": "nsys_gpukernsum",
+    "n_instances": 131,
+    "launches_per_sample": 0,
+    "median_us": 473.783,
+    "q1_us": 0,
+    "q3_us": 0,
+    "min_us": 472.548,
+    "p95_us": 0,
+    "nsys_mean_us": 490.6491,
+    "kernels": [
+      {
+        "name": "multistage_qgemm_bfloat16_uint8_bfloat16_g32_1512bba8",
+        "instances": 131,
+        "avg_us": 490.6491
+      }
+    ]
+  },
+  "achieved_gbps": 139.57,
+  "achieved_tflops": 0.496,
+  "roofline": {
+    "spec_gbps": 936.0,
+    "measured_gbps": 816.3,
+    "pct_spec": 14.9,
+    "pct_measured": 17.1
+  },
+  "correctness": {
+    "validated": true,
+    "l2_rel_err": 0.0037810395,
+    "max_abs_err": 1.3806458,
+    "max_rel_err": 173.31587,
+    "tolerance": "l2_rel<3e-2 (vs fp32 dequant ref)"
+  },
+  "env": {
+    "mojo_version": "1.0.0",
+    "max_version": "26.5.0",
+    "modular_sha": "b4497b7ce9ba96331c72c637ad41b44bab374f33",
+    "cuda_version": "13.3",
+    "llamacpp_sha": "",
+    "flashinfer_version": "unknown",
+    "harness_sha": "87cf13a80db748d553022b625098aefbfbe33699",
+    "timestamp_utc": "2026-09-02T02:49:55.424890+00:00"
+  },
+  "notes": "MAX REAL dispatch (matmul_gpu_qint4[g32], static K/N); kernel(s): multistage_qgemm_bfloat16_uint8_bfloat16_g32_1512bba8. "
+}
