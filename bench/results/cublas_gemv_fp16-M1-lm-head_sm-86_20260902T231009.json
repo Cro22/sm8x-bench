@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "impl": "cublas",
+  "kernel": "gemv",
+  "variant": "fp16_M1_lm_head",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 3090",
+    "arch": "sm_86",
+    "compute_capability": "8.6",
+    "sms": 82,
+    "driver": "610.62",
+    "cuda_driver_version": "13.3",
+    "graphics_clock_mhz_current": 1695,
+    "graphics_clock_mhz_max": 2100,
+    "graphics_clock_mhz_locked": 1695,
+    "mem_clock_mhz": 5001,
+    "mem_clock_mhz_max": 9751,
+    "mem_clock_locked": false,
+    "power_limit_w": 420.0,
+    "graphics_clock_mhz_observed": {
+      "min": 1695,
+      "max": 1695,
+      "median": 1695,
+      "n": 75
+    }
+  },
+  "shape": {
+    "M": 1,
+    "N": 128256,
+    "K": 4096
+  },
+  "dtype": {
+    "weights": "fp16",
+    "activations": "fp16",
+    "accum": "fp32"
+  },
+  "bytes_moved": 1050937856,
+  "flops": 1050673152,
+  "timing": {
+    "source": "nsys_gpukernsum",
+    "n_instances": 131,
+    "launches_per_sample": 0,
+    "median_us": 1067.873,
+    "q1_us": 0,
+    "q3_us": 0,
+    "min_us": 1065.261,
+    "p95_us": 0,
+    "nsys_mean_us": 1095.8354,
+    "harness_wallclock_median_us": 1176.52,
+    "kernels": [
+      {
+        "name": "void gemv2T_kernel_val<int, int, __half, float, float, float, (int)128, (int)16, (int)4, (int)4, (b\u2026",
+        "instances": 131,
+        "avg_us": 1095.8354
+      }
+    ]
+  },
+  "achieved_gbps": 984.14,
+  "achieved_tflops": 0.984,
+  "roofline": {
+    "spec_gbps": 936.0,
+    "measured_gbps": 816.3,
+    "pct_spec": 105.1,
+    "pct_measured": 120.6
+  },
+  "correctness": {
+    "validated": true,
+    "l2_rel_err": 4.17936e-07,
+    "max_abs_err": 0.000152588,
+    "max_rel_err": 0.181818,
+    "tolerance": "l2_rel<3e-2 (vs fp32 ref)"
+  },
+  "env": {
+    "mojo_version": "1.0.0",
+    "max_version": "26.5.0",
+    "modular_sha": "b4497b7ce9ba96331c72c637ad41b44bab374f33",
+    "cuda_version": "13.3",
+    "llamacpp_sha": "",
+    "flashinfer_version": "unknown",
+    "harness_sha": "821c320f4c34c4261021cb5c18836e89f187463b-dirty",
+    "timestamp_utc": "2026-09-02T23:10:09.212000+00:00"
+  },
+  "notes": "cuBLAS fp16 (CUBLAS_COMPUTE_32F, fp32 accum); nsys kernel(s): void gemv2T_kernel_val<int, int, __half, float, float, float, (int)128, (int)16, (int)4, (int)4, (b\u2026. Same fp16 weights as MAX; dense 2 B/weight ceiling. harness wall-clock median 1176.52 us. "
+}

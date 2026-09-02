@@ -47,3 +47,4 @@ bench/inputs/
 .DS_Store
 bench/baselines/llamacpp/gemv_bench
 bench/baselines/llamacpp/quantize_weight
+bench/baselines/cublas/cublas_gemv
