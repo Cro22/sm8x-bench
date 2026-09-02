@@ -1,23 +1,27 @@
 # H0 results — MAX kernels on consumer NVIDIA GPUs
 
-**Status: partial.** All MAX kernels (GEMV/matmul fp16/bf16/Q4_0, attention
-decode), the measured roofline, and the **llama.cpp Q4_0 baseline** are done on
-the RTX 3090. Remaining baselines (llama.cpp Q8_0/Q4_K + flash-attn, FlashInfer
-decode, cuBLAS fp16 GEMV) are pending; this report is regenerated as they land.
+**Status: partial.** All MAX kernels (GEMV/matmul fp16/bf16, Q4_0 via its real
+dispatcher, attention decode), the measured roofline, the **llama.cpp Q4_0
+baseline**, and **our Q4_0 kernel** are done on the RTX 3090, all under a
+per-run-verified 1695 MHz clock. Remaining baselines (llama.cpp Q8_0/Q4_K +
+flash-attn, FlashInfer, cuBLAS) are pending. This report was corrected after an
+adversarial review (see "Corrections" below).
 
 ## Result
 
-On the RTX 3090 (sm_86), MAX's dense decode GEMV is essentially at the memory
-bandwidth limit — fp16/bf16 M=1 reaches **87–98 % of the spec roofline** across
-all Llama-3-8B projection shapes — and MAX's **attention decode** is also at the
-limit at long context (**86 % of spec / 99 % of measured roofline at seq 16384**;
-latency-bound at short context, as expected for the data volume). The one gap is
-MAX's **Q4_0 (4-bit) GPU matmul**: it runs at **6–15 % of roofline**, and against
-the incumbent — **llama.cpp's Q4_0 GEMV on the same weights runs at 59–96 % of
-roofline (M=1), making MAX 3.5–9.7× slower** — with MAX's tuned int4 configs not
-even compiling for GGUF Q4_0 (group_size 32) and one shape (down_proj, K=14336)
-crashing where llama.cpp runs fine. The dense and attention paths need nothing;
-**Q4_0 is the H1 target.**
+On the RTX 3090 (sm_86), MAX's dense decode GEMV is at the memory-bandwidth limit
+(fp16/bf16 M=1 at **90–97 % of spec** across all projection shapes) and its
+attention decode is near the limit at long context (**86 % of spec at 16k**). Its
+**Q4_0 (4-bit)** path, measured through its real dispatcher, is **uneven**: a
+decode-tuned config gives **69–81 %** on up_proj/down_proj, but shapes that fall
+to the default 128×128 GEMM tile (gate_up/lm_head) run at **~15 %**, and
+group_size-32 (GGUF Q4_0) **fails to compile** on o_proj/qkv. **llama.cpp** is the
+fastest Q4_0 everywhere (**71–96 %** of spec). **Our kernel**
+(`kernels/q4_0_gemv.mojo`) is **61–92 %** on all six shapes — ~5–15 % behind
+llama.cpp, faster than MAX only where MAX uses the default GEMM (gate_up/lm_head,
+~6×), slightly behind MAX on down_proj, and it runs the two shapes MAX
+compile-fails. The contribution is a *uniform* near-roofline decode-quant kernel,
+not a blanket speedup over MAX.
 
 ## Setup
 
@@ -53,72 +57,62 @@ results JSON.
 
 | Impl | Variant | Shape | Median µs | min µs | GB/s | % spec | % meas | L2 err | Validated | JSON |
 |---|---|---|---|---|---|---|---|---|---|---|
-| probe | read_stream_2GiB | 2048MiB read | 2722.43 | 2633.22 | 789 | 84.3 | 96.7 | — | yes | [json](bench/results/probe_bw-probe_read-stream-2GiB_sm-86_20260901T191713.json) |
+| probe | read_stream_2GiB | 2048MiB read | 2715.89 | 2643.20 | 791 | 84.5 | 97.3 | — | yes | [json](bench/results/probe_bw-probe_read-stream-2GiB_sm-86_20260902T025205.json) |
 
 #### GEMV / matmul
 
 | Impl | Variant | Shape | Median µs | min µs | GB/s | % spec | % meas | L2 err | Validated | JSON |
 |---|---|---|---|---|---|---|---|---|---|---|
-| llamacpp | Q4_0_M1_o_proj | M1 4096x4096 | 16.24 | 16.24 | 582 | 62.2 | 71.4 | 1.1e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-o-proj_sm-86_20260901T235740.json) |
-| max | Q4_0_M1_o_proj | M1 4096x4096 | 166.18 | 165.82 | 57 | 6.1 | 7.0 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M1-o-proj_sm-86_20260901T231243.json) |
-| max | bf16_M1_o_proj | M1 4096x4096 | 40.12 | 39.77 | 837 | 89.4 | 102.6 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M1-o-proj_sm-86_20260901T222322.json) |
-| max | fp16_M1_o_proj | M1 4096x4096 | 40.97 | 40.58 | 819 | 87.5 | 100.5 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-o-proj_sm-86_20260901T222314.json) |
-| ours | Q4_0_M1_o_proj | M1 4096x4096 | 16.24 | 15.61 | 582 | 62.2 | 71.4 | 5.3e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-o-proj_sm-86_20260902T004707.json) |
-| llamacpp | Q4_0_M1_down_proj | M1 4096x14336 | 44.98 | 44.98 | 735 | 78.5 | 90.2 | 1.4e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-down-proj_sm-86_20260901T235756.json) |
-| max | bf16_M1_down_proj | M1 4096x14336 | 135.35 | 134.74 | 868 | 92.7 | 106.4 | 1.6e-03 | yes | [json](bench/results/max_gemv_bf16-M1-down-proj_sm-86_20260901T222357.json) |
-| max | fp16_M1_down_proj | M1 4096x14336 | 137.55 | 137.00 | 854 | 91.2 | 104.7 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-down-proj_sm-86_20260901T222348.json) |
-| ours | Q4_0_M1_down_proj | M1 4096x14336 | 48.82 | 46.70 | 677 | 72.4 | 83.1 | 5.5e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-down-proj_sm-86_20260902T004715.json) |
-| llamacpp | Q4_0_M1_qkv_fused | M1 6144x4096 | 23.00 | 23.00 | 616 | 65.9 | 75.6 | 1.2e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-qkv-fused_sm-86_20260901T235748.json) |
-| max | Q4_0_M1_qkv_fused | M1 6144x4096 | 164.23 | 163.59 | 86 | 9.2 | 10.6 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M1-qkv-fused_sm-86_20260901T231251.json) |
-| max | bf16_M1_qkv_fused | M1 6144x4096 | 57.52 | 57.27 | 875 | 93.5 | 107.3 | 1.6e-03 | yes | [json](bench/results/max_gemv_bf16-M1-qkv-fused_sm-86_20260901T222340.json) |
-| max | fp16_M1_qkv_fused | M1 6144x4096 | 57.64 | 57.35 | 874 | 93.3 | 107.1 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-qkv-fused_sm-86_20260901T222331.json) |
-| ours | Q4_0_M1_qkv_fused | M1 6144x4096 | 21.67 | 21.10 | 654 | 69.9 | 80.2 | 5.5e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-qkv-fused_sm-86_20260902T004711.json) |
-| llamacpp | Q4_0_M1_up_proj | M1 14336x4096 | 44.61 | 44.61 | 741 | 79.2 | 90.9 | 1.3e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-up-proj_sm-86_20260901T235802.json) |
-| max | Q4_0_M1_up_proj | M1 14336x4096 | 325.37 | 324.83 | 102 | 10.9 | 12.5 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M1-up-proj_sm-86_20260901T231359.json) |
-| max | bf16_M1_up_proj | M1 14336x4096 | 130.55 | 130.23 | 900 | 96.1 | 110.3 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M1-up-proj_sm-86_20260901T222414.json) |
-| max | fp16_M1_up_proj | M1 14336x4096 | 130.61 | 130.45 | 899 | 96.1 | 110.3 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-up-proj_sm-86_20260901T222406.json) |
-| ours | Q4_0_M1_up_proj | M1 14336x4096 | 44.82 | 43.99 | 738 | 78.8 | 90.5 | 5.4e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-up-proj_sm-86_20260902T004719.json) |
-| llamacpp | Q4_0_M1_gate_up | M1 28672x4096 | 77.37 | 77.37 | 855 | 91.3 | 104.8 | 1.3e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-gate-up_sm-86_20260901T235808.json) |
-| max | Q4_0_M1_gate_up | M1 28672x4096 | 486.99 | 485.78 | 136 | 14.5 | 16.7 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M1-gate-up_sm-86_20260901T231408.json) |
-| max | bf16_M1_gate_up | M1 28672x4096 | 260.33 | 259.92 | 902 | 96.4 | 110.7 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M1-gate-up_sm-86_20260901T222431.json) |
-| max | fp16_M1_gate_up | M1 28672x4096 | 266.07 | 265.78 | 883 | 94.3 | 108.3 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-gate-up_sm-86_20260901T222422.json) |
-| ours | Q4_0_M1_gate_up | M1 28672x4096 | 81.87 | 81.32 | 808 | 86.3 | 99.0 | 5.5e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-gate-up_sm-86_20260902T004723.json) |
-| llamacpp | Q4_0_M1_lm_head | M1 128256x4096 | 330.27 | 330.27 | 896 | 95.7 | 109.8 | 1.3e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-lm-head_sm-86_20260901T235815.json) |
-| max | Q4_0_M1_lm_head | M1 128256x4096 | 2094.07 | 2091.28 | 141 | 15.1 | 17.3 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M1-lm-head_sm-86_20260901T231427.json) |
-| max | bf16_M1_lm_head | M1 128256x4096 | 1146.51 | 1145.85 | 917 | 97.9 | 112.4 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M1-lm-head_sm-86_20260901T222450.json) |
-| max | fp16_M1_lm_head | M1 128256x4096 | 1149.43 | 1148.69 | 914 | 97.7 | 112.1 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-lm-head_sm-86_20260901T222440.json) |
-| ours | Q4_0_M1_lm_head | M1 128256x4096 | 341.36 | 340.82 | 866 | 92.6 | 106.2 | 5.4e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-lm-head_sm-86_20260902T004728.json) |
-| llamacpp | Q4_0_M8_o_proj | M8 4096x4096 | 25.50 | 25.50 | 375 | 40.1 | 46.0 | 1.3e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M8-o-proj_sm-86_20260901T235744.json) |
-| max | Q4_0_M8_o_proj | M8 4096x4096 | 165.61 | 164.58 | 58 | 6.2 | 7.1 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M8-o-proj_sm-86_20260901T231247.json) |
-| max | bf16_M8_o_proj | M8 4096x4096 | 52.51 | 46.28 | 641 | 68.5 | 78.7 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M8-o-proj_sm-86_20260901T222327.json) |
-| max | fp16_M8_o_proj | M8 4096x4096 | 53.00 | 50.28 | 636 | 67.9 | 77.9 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M8-o-proj_sm-86_20260901T222319.json) |
-| llamacpp | Q4_0_M8_down_proj | M8 4096x14336 | 74.36 | 74.36 | 448 | 47.9 | 55.0 | 1.3e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M8-down-proj_sm-86_20260901T235759.json) |
-| max | bf16_M8_down_proj | M8 4096x14336 | 153.95 | 147.22 | 765 | 81.7 | 93.8 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M8-down-proj_sm-86_20260901T222402.json) |
-| max | fp16_M8_down_proj | M8 4096x14336 | 155.26 | 148.44 | 758 | 81.0 | 93.0 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M8-down-proj_sm-86_20260901T222353.json) |
-| llamacpp | Q4_0_M8_qkv_fused | M8 6144x4096 | 35.97 | 35.97 | 398 | 42.5 | 48.8 | 1.3e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M8-qkv-fused_sm-86_20260901T235752.json) |
-| max | Q4_0_M8_qkv_fused | M8 6144x4096 | 163.42 | 163.23 | 88 | 9.4 | 10.7 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M8-qkv-fused_sm-86_20260901T231254.json) |
-| max | bf16_M8_qkv_fused | M8 6144x4096 | 68.92 | 64.83 | 733 | 78.3 | 89.8 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M8-qkv-fused_sm-86_20260901T222344.json) |
-| max | fp16_M8_qkv_fused | M8 6144x4096 | 67.57 | 62.93 | 747 | 79.8 | 91.6 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M8-qkv-fused_sm-86_20260901T222336.json) |
-| llamacpp | Q4_0_M8_up_proj | M8 14336x4096 | 73.05 | 73.05 | 456 | 48.7 | 55.9 | 1.3e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M8-up-proj_sm-86_20260901T235805.json) |
-| max | Q4_0_M8_up_proj | M8 14336x4096 | 324.61 | 324.39 | 103 | 11.0 | 12.6 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M8-up-proj_sm-86_20260901T231404.json) |
-| max | bf16_M8_up_proj | M8 14336x4096 | 156.34 | 146.18 | 753 | 80.5 | 92.3 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M8-up-proj_sm-86_20260901T222418.json) |
-| max | fp16_M8_up_proj | M8 14336x4096 | 156.08 | 149.03 | 754 | 80.6 | 92.5 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M8-up-proj_sm-86_20260901T222410.json) |
-| llamacpp | Q4_0_M8_gate_up | M8 28672x4096 | 137.15 | 137.15 | 486 | 51.9 | 59.5 | 1.4e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M8-gate-up_sm-86_20260901T235811.json) |
-| max | Q4_0_M8_gate_up | M8 28672x4096 | 486.58 | 485.69 | 137 | 14.6 | 16.8 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M8-gate-up_sm-86_20260901T231411.json) |
-| max | bf16_M8_gate_up | M8 28672x4096 | 334.54 | 316.72 | 704 | 75.2 | 86.3 | 2.4e-03 | yes | [json](bench/results/max_gemv_bf16-M8-gate-up_sm-86_20260901T222435.json) |
-| max | fp16_M8_gate_up | M8 28672x4096 | 334.95 | 316.39 | 703 | 75.1 | 86.2 | 3.0e-04 | yes | [json](bench/results/max_gemv_fp16-M8-gate-up_sm-86_20260901T222427.json) |
-| llamacpp | Q4_0_M8_lm_head | M8 128256x4096 | 595.63 | 595.63 | 500 | 53.4 | 61.3 | 1.4e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M8-lm-head_sm-86_20260901T235818.json) |
-| max | Q4_0_M8_lm_head | M8 128256x4096 | 2114.68 | 2111.67 | 141 | 15.0 | 17.3 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M8-lm-head_sm-86_20260901T231443.json) |
-| max | bf16_M8_lm_head | M8 128256x4096 | 1289.65 | 1217.74 | 816 | 87.2 | 100.1 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M8-lm-head_sm-86_20260901T222455.json) |
-| max | fp16_M8_lm_head | M8 128256x4096 | 1264.90 | 1190.49 | 832 | 88.9 | 102.1 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M8-lm-head_sm-86_20260901T222445.json) |
+| llamacpp | Q4_0_M1_o_proj | M1 4096x4096 | 14.18 | 14.03 | 667 | 71.2 | 81.7 | 1.1e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-o-proj_sm-86_20260902T024855.json) |
+| max | Q4_0_M1_o_proj | M1 4096x4096 | compile-fail | — | — | — | — | — | — | [json](bench/results/max_gemv_Q4-0-M1-o-proj_sm-86_20260902T024847.json) |
+| max | bf16_M1_o_proj | M1 4096x4096 | 39.58 | 39.27 | 848 | 90.6 | 103.9 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M1-o-proj_sm-86_20260902T025217.json) |
+| max | fp16_M1_o_proj | M1 4096x4096 | 39.59 | 39.31 | 848 | 90.6 | 103.9 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-o-proj_sm-86_20260902T025209.json) |
+| ours | Q4_0_M1_o_proj | M1 4096x4096 | 16.40 | 15.85 | 576 | 61.6 | 70.6 | 5.3e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-o-proj_sm-86_20260902T024851.json) |
+| llamacpp | Q4_0_M1_down_proj | M1 4096x14336 | 39.64 | 39.48 | 834 | 89.1 | 102.2 | 1.4e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-down-proj_sm-86_20260902T024934.json) |
+| max | Q4_0_M1_down_proj | M1 4096x14336 | 43.53 | 43.19 | 760 | 81.2 | 93.1 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M1-down-proj_sm-86_20260902T024927.json) |
+| max | bf16_M1_down_proj | M1 4096x14336 | 134.04 | 133.36 | 876 | 93.6 | 107.4 | 1.6e-03 | yes | [json](bench/results/max_gemv_bf16-M1-down-proj_sm-86_20260902T025249.json) |
+| max | fp16_M1_down_proj | M1 4096x14336 | 134.01 | 133.23 | 877 | 93.7 | 107.4 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-down-proj_sm-86_20260902T025241.json) |
+| ours | Q4_0_M1_down_proj | M1 4096x14336 | 49.65 | 47.56 | 666 | 71.2 | 81.6 | 5.5e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-down-proj_sm-86_20260902T024931.json) |
+| llamacpp | Q4_0_M1_qkv_fused | M1 6144x4096 | 19.57 | 19.38 | 724 | 77.4 | 88.8 | 1.2e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-qkv-fused_sm-86_20260902T024921.json) |
+| max | Q4_0_M1_qkv_fused | M1 6144x4096 | compile-fail | — | — | — | — | — | — | [json](bench/results/max_gemv_Q4-0-M1-qkv-fused_sm-86_20260902T024914.json) |
+| max | bf16_M1_qkv_fused | M1 6144x4096 | 57.55 | 57.34 | 875 | 93.5 | 107.2 | 1.6e-03 | yes | [json](bench/results/max_gemv_bf16-M1-qkv-fused_sm-86_20260902T025233.json) |
+| max | fp16_M1_qkv_fused | M1 6144x4096 | 57.53 | 57.34 | 875 | 93.5 | 107.2 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-qkv-fused_sm-86_20260902T025225.json) |
+| ours | Q4_0_M1_qkv_fused | M1 6144x4096 | 22.57 | 22.05 | 628 | 67.1 | 76.9 | 5.5e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-qkv-fused_sm-86_20260902T024917.json) |
+| llamacpp | Q4_0_M1_up_proj | M1 14336x4096 | 41.76 | 41.66 | 792 | 84.6 | 97.0 | 1.3e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-up-proj_sm-86_20260902T024949.json) |
+| max | Q4_0_M1_up_proj | M1 14336x4096 | 51.62 | 51.15 | 641 | 68.4 | 78.5 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M1-up-proj_sm-86_20260902T024940.json) |
+| max | bf16_M1_up_proj | M1 14336x4096 | 130.80 | 130.48 | 898 | 96.0 | 110.0 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M1-up-proj_sm-86_20260902T025306.json) |
+| max | fp16_M1_up_proj | M1 14336x4096 | 130.80 | 130.58 | 898 | 96.0 | 110.0 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-up-proj_sm-86_20260902T025257.json) |
+| ours | Q4_0_M1_up_proj | M1 14336x4096 | 43.68 | 43.12 | 757 | 80.9 | 92.7 | 5.4e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-up-proj_sm-86_20260902T024946.json) |
+| llamacpp | Q4_0_M1_gate_up | M1 28672x4096 | 75.53 | 75.41 | 875 | 93.5 | 107.2 | 1.3e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-gate-up_sm-86_20260902T025002.json) |
+| max | Q4_0_M1_gate_up | M1 28672x4096 | 473.78 | 472.55 | 140 | 14.9 | 17.1 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M1-gate-up_sm-86_20260902T024955.json) |
+| max | bf16_M1_gate_up | M1 28672x4096 | 258.99 | 258.65 | 907 | 96.9 | 111.1 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M1-gate-up_sm-86_20260902T025323.json) |
+| max | fp16_M1_gate_up | M1 28672x4096 | 259.00 | 258.72 | 907 | 96.9 | 111.1 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-gate-up_sm-86_20260902T025314.json) |
+| ours | Q4_0_M1_gate_up | M1 28672x4096 | 80.25 | 79.61 | 824 | 88.0 | 100.9 | 5.5e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-gate-up_sm-86_20260902T024959.json) |
+| llamacpp | Q4_0_M1_lm_head | M1 128256x4096 | 330.61 | 330.33 | 895 | 95.6 | 109.6 | 1.3e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-lm-head_sm-86_20260902T025016.json) |
+| max | Q4_0_M1_lm_head | M1 128256x4096 | 2030.90 | 2028.96 | 146 | 15.6 | 17.8 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M1-lm-head_sm-86_20260902T025008.json) |
+| max | bf16_M1_lm_head | M1 128256x4096 | 1150.49 | 1149.65 | 913 | 97.6 | 111.9 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M1-lm-head_sm-86_20260902T025344.json) |
+| max | fp16_M1_lm_head | M1 128256x4096 | 1150.52 | 1149.77 | 913 | 97.6 | 111.9 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-lm-head_sm-86_20260902T025332.json) |
+| ours | Q4_0_M1_lm_head | M1 128256x4096 | 345.55 | 344.73 | 856 | 91.4 | 104.9 | 5.4e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-lm-head_sm-86_20260902T025012.json) |
+| max | bf16_M8_o_proj | M8 4096x4096 | 51.77 | 49.34 | 651 | 69.5 | 79.7 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M8-o-proj_sm-86_20260902T025222.json) |
+| max | fp16_M8_o_proj | M8 4096x4096 | 52.13 | 45.14 | 646 | 69.0 | 79.2 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M8-o-proj_sm-86_20260902T025213.json) |
+| max | bf16_M8_down_proj | M8 4096x14336 | 154.15 | 144.52 | 764 | 81.6 | 93.6 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M8-down-proj_sm-86_20260902T025253.json) |
+| max | fp16_M8_down_proj | M8 4096x14336 | 153.99 | 144.48 | 765 | 81.7 | 93.7 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M8-down-proj_sm-86_20260902T025246.json) |
+| max | bf16_M8_qkv_fused | M8 6144x4096 | 69.12 | 64.76 | 731 | 78.0 | 89.5 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M8-qkv-fused_sm-86_20260902T025237.json) |
+| max | fp16_M8_qkv_fused | M8 6144x4096 | 67.54 | 62.93 | 748 | 79.9 | 91.6 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M8-qkv-fused_sm-86_20260902T025229.json) |
+| max | bf16_M8_up_proj | M8 14336x4096 | 154.95 | 147.97 | 760 | 81.2 | 93.1 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M8-up-proj_sm-86_20260902T025311.json) |
+| max | fp16_M8_up_proj | M8 14336x4096 | 154.99 | 147.44 | 760 | 81.2 | 93.1 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M8-up-proj_sm-86_20260902T025302.json) |
+| max | bf16_M8_gate_up | M8 28672x4096 | 332.61 | 315.94 | 708 | 75.6 | 86.7 | 2.4e-03 | yes | [json](bench/results/max_gemv_bf16-M8-gate-up_sm-86_20260902T025327.json) |
+| max | fp16_M8_gate_up | M8 28672x4096 | 329.89 | 312.31 | 714 | 76.2 | 87.4 | 3.0e-04 | yes | [json](bench/results/max_gemv_fp16-M8-gate-up_sm-86_20260902T025319.json) |
+| max | bf16_M8_lm_head | M8 128256x4096 | 1265.10 | 1189.78 | 832 | 88.9 | 101.9 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M8-lm-head_sm-86_20260902T025349.json) |
+| max | fp16_M8_lm_head | M8 128256x4096 | 1267.47 | 1191.60 | 831 | 88.7 | 101.8 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M8-lm-head_sm-86_20260902T025339.json) |
 
 #### Attention decode
 
 | Impl | Variant | Shape | Median µs | min µs | GB/s | % spec | % meas | L2 err | Validated | JSON |
 |---|---|---|---|---|---|---|---|---|---|---|
-| max | fp16_gqa32x8_hd128_seq1024 | seq1024 gqa32x8 hd128 | 18.68 | 18.45 | 225 | 24.0 | 27.5 | 4.5e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq1024_sm-86_20260901T233654.json) |
-| max | fp16_gqa32x8_hd128_seq4096 | seq4096 gqa32x8 hd128 | 29.77 | 28.97 | 563 | 60.2 | 69.1 | 3.8e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq4096_sm-86_20260901T233659.json) |
-| max | fp16_gqa32x8_hd128_seq16384 | seq16384 gqa32x8 hd128 | 82.92 | 81.84 | 809 | 86.5 | 99.2 | 2.7e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq16384_sm-86_20260901T233703.json) |
+| max | fp16_gqa32x8_hd128_seq1024 | seq1024 gqa32x8 hd128 | 17.95 | 17.74 | 234 | 25.0 | 28.6 | 4.5e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq1024_sm-86_20260902T025352.json) |
+| max | fp16_gqa32x8_hd128_seq4096 | seq4096 gqa32x8 hd128 | 29.05 | 27.46 | 578 | 61.7 | 70.7 | 3.8e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq4096_sm-86_20260902T025356.json) |
+| max | fp16_gqa32x8_hd128_seq16384 | seq16384 gqa32x8 hd128 | 82.66 | 81.54 | 812 | 86.7 | 99.5 | 2.7e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq16384_sm-86_20260902T025400.json) |
 <!-- END GENERATED TABLES -->
 
 ## Reading the results
@@ -132,21 +126,22 @@ results JSON.
   activations for the same weights; still memory-class. fp16 M>1 is served by
   cuBLAS (`ampere_fp16_s16816gemm`), bf16 M>1 by MAX's own `multistage_gemm`;
   both measured, at parity here.
-- **Q4_0 (4-bit): 6–15 % of spec — the gap.** Every Q4_0 shape is ~4× slower
-  than its fp16 GEMV counterpart while moving 3.5× *less* data. The kernel that
-  runs is `multistage_qgemm_bfloat16_uint8_bfloat16` with a 128×128 GEMM tile,
-  which is the only working config (see caveats) and has no M=1 specialization,
-  so at decode M it is badly underutilized. Utilization improves with N (6 % at
-  N=4096 → 15 % at N=128256) as the wide tile fills, but never approaches the
-  bandwidth the same weights get in fp16.
-- **Q4_0 vs llama.cpp: MAX is 3.5–9.7× slower.** On identical Q4_0 weight bytes,
-  nsys per-kernel: llama.cpp's `mul_mat_vec_q` (+ `quantize_q8_1` for its Q8_1
-  activations) runs at **59–96 % of spec at M=1** (17 µs at o_proj vs MAX's
-  166 µs → 9.7×; the gap narrows to ~6× at large N as MAX's wide tile fills).
-  At M=8 llama.cpp's GEMV path drops to 40–53 % (still 3.5–6.5× ahead of MAX).
-  llama.cpp uses f32→Q8_1 activations vs MAX's bf16 — an algorithm difference,
-  not a harness artifact; both validate against the same fp32 dequant reference.
-  This is direct evidence the gap is MAX-specific, not a hardware limit.
+- **Q4_0 (4-bit), MAX real dispatch: uneven, not a flat "gap".** Measured through
+  the public `matmul_gpu_qint4[g32]` with static shapes (the real per-shape
+  config, not a forced fallback): up_proj **68 %** and down_proj **81 %** get a
+  decode-tuned BM=16/BK=32 config and are competitive; gate_up and lm_head fall to
+  the default 128×128 GEMM tile and run at **~15 %** (at M=1 that tile uses 1/128
+  of its rows); o_proj/qkv **compile-fail** for g32 (BK=128 config, see caveats).
+  So MAX is not uniformly slow — it lacks a single decode-quant kernel that works
+  well on every shape.
+- **Q4_0 three-way (M=1, nsys per-kernel, same weights): llama.cpp fastest.**
+  llama.cpp's `mul_mat_vec_q` (+`quantize_q8_1`, CUDA graphs disabled so each
+  launch is a distinct instance) is **71–96 %** of spec — fastest on every shape.
+  Ours (`dp4a`/Q8_1) is **61–92 %**, ~5–15 % behind llama.cpp. Versus MAX real
+  dispatch: ours is **~6× faster only on gate_up/lm_head** (default GEMM); MAX's
+  decode config is **faster than ours on down_proj** (81 % vs 70 %) and slightly
+  behind on up_proj; and MAX compile-fails o_proj/qkv where ours runs. See the H1
+  section.
 - **Attention decode: bandwidth-bound-optimal at long context.** seq 16384 hits
   86.5 % of spec (99 % of measured roofline); seq 4096 is 60 %; seq 1024 is 24 %.
   The short-context numbers are latency-bound, not a kernel deficiency — at seq
@@ -157,18 +152,25 @@ results JSON.
 
 ## Anomalies and caveats
 
-- **Q4_0 tuned configs do not compile (group_size 32).** The public
-  `matmul_gpu_qint4[group_size=32]` wrapper's per-shape tuned configs use BK=128,
-  so `group_size // BK = 32 // 128 = 0` → a zero-sized scales dimension and a
-  comptime crash. Those configs assume group_size 128. Only the generic
-  `default_config` (BK=32) works; that is what the numbers above use. See
-  `reports/open-questions.md` (item 5) and `reports/api-drift.md`.
-- **Q4_0 down_proj (N=4096, K=14336) crashes** with CUDA_ERROR_ILLEGAL_ADDRESS
-  even with the working config → no Q4_0 GPU path for that shape on sm_86 (N/A).
-- **`% meas` exceeds 100 % for the dense GEMVs.** The bandwidth probe
-  (`bw_probe`, ~789–815 GB/s) under-measures true achievable bandwidth; real
-  GEMVs reach 900+ GB/s. The probe (a read-only reduction) needs more in-flight
-  loads to be a true ceiling. Until fixed, `% spec` is the reliable column.
+- **Q4_0 compile-fail for group_size 32 (o_proj/qkv), real.** Their tuned
+  m≤32 config uses BK=128, so `group_size // BK = 32 // 128 = 0` → zero-sized
+  scales dim → comptime crash. The table shows these as `compile-fail`.
+  up_proj/down_proj (BK=32 configs) compile fine. See `reports/open-questions.md`.
+- **The earlier "down_proj crashes" claim is RETRACTED.** That
+  CUDA_ERROR_ILLEGAL_ADDRESS came from a first harness that *forced* the BM=128
+  default config; MAX's real dispatch for down_proj uses BM=16 and runs cleanly
+  (43.6 µs / 81 %). The unmasked-A-load OOB is a genuine *latent* kernel bug
+  (`reports/max-q4_0-analysis.md`) but is not reached by the shipping dispatcher
+  at these shapes.
+- **`% meas` exceeds 100 % on the fastest kernels.** The bandwidth probe
+  (`bw_probe`, ~791–816 GB/s) under-measures true achievable bandwidth; the best
+  GEMVs reach 870–900 GB/s. The probe (a read-only reduction) needs more
+  in-flight loads to be a true ceiling. `% spec` is the reliable column.
+- **Provenance.** Every GEMV JSON records `gpu.graphics_clock_mhz_observed`
+  sampled under load (all 1695 here); `harness_sha` ignores generated outputs so
+  it names the committed code that ran. This report was corrected after an
+  adversarial review found the first pass measured MAX via a forced config and
+  had unproven clocks.
 - **Shared-desktop GPU.** The Windows desktop composits on the same physical GPU
   (~3.3 GB resident, ~1 % util, no compute contention). nsys per-kernel timing is
   robust to this; the harness wall-clock (recorded as a secondary field) is not.
@@ -176,44 +178,59 @@ results JSON.
   tolerance field. Element-wise error is large on cancellation-heavy outputs,
   which is why correctness is gated on L2, not per-element rel error.
 
-## What this implies for H1
-
-The dense GEMV and attention paths need nothing. The **Q4_0 GPU path was the H1
-target** — and H1 delivered it (below).
-
 ## H1 result — our Q4_0 decode GEMV (impl "ours")
 
-We wrote a Q4_0 decode GEMV for consumer Ampere (`kernels/q4_0_gemv.mojo`) that
-**closes the gap to llama.cpp and is 6–10× faster than MAX**, on identical Q4_0
-weight bytes, same nsys per-kernel timing, correctness L2 ~5e-3 (M=1):
+The dense and attention paths need nothing. For Q4_0 we wrote a decode GEMV
+(`kernels/q4_0_gemv.mojo`) that is uniformly near-roofline on all six shapes.
+M=1, nsys per-kernel, identical Q4_0 weight bytes, clock verified 1695, L2 ~5e-3:
 
-| shape (N×K) | MAX | **ours** | llama.cpp | ours vs MAX | ours vs llama |
-|---|---|---|---|---|---|
-| o_proj 4096×4096 | 166 µs / 6 % | **16.2 µs / 62 %** | 16 µs / 62 % | 10.2× | parity |
-| qkv 6144×4096 | 164 µs / 9 % | **21.7 µs / 70 %** | 23 µs / 66 % | 7.6× | ours +6 % |
-| down_proj 4096×14336 | crash | **48.8 µs / 72 %** | 45 µs / 78 % | — (MAX N/A) | close |
-| up_proj 14336×4096 | 325 µs / 11 % | **44.8 µs / 79 %** | 45 µs / 79 % | 7.3× | parity |
-| gate_up 28672×4096 | 487 µs / 14 % | **81.9 µs / 86 %** | 77 µs / 91 % | 5.9× | close |
-| lm_head 128256×4096 | 2094 µs / 15 % | **341 µs / 93 %** | 330 µs / 96 % | 6.1× | close |
+| shape (N×K) | MAX (real dispatch) | **ours** | llama.cpp |
+|---|---|---|---|
+| o_proj 4096×4096 | compile-fail (g32) | **16.4 µs / 62 %** | 14.2 µs / 71 % |
+| qkv 6144×4096 | compile-fail (g32) | **22.6 µs / 67 %** | 19.6 µs / 77 % |
+| down_proj 4096×14336 | 43.5 µs / 81 % | **49.7 µs / 71 %** | 39.6 µs / 89 % |
+| up_proj 14336×4096 | 51.6 µs / 68 % | **43.7 µs / 81 %** | 41.8 µs / 85 % |
+| gate_up 28672×4096 | 474 µs / 15 % | **80.3 µs / 88 %** | 75.5 µs / 94 % |
+| lm_head 128256×4096 | 2031 µs / 16 % | **~344 µs / 92 %** | 331 µs / 96 % |
+
+Honest reading: **llama.cpp is fastest on every shape.** Ours is 5–15 % behind
+it. Versus MAX's real dispatch, ours is ~6× faster only on gate_up/lm_head (where
+MAX uses the default GEMM); MAX is faster than ours on down_proj and roughly even
+on up_proj; and ours runs the two shapes MAX compile-fails. The contribution is a
+*single* kernel that is uniformly 62–92 % of roofline where MAX is either absent
+(compile-fail) or 15 % — not a blanket win over MAX.
 
 Mechanism: the naive fp32 dequant path is **compute-bound on per-weight
 int→float converts**, not memory-bound (proven — vectorized loads, ILP, smem
-staging all plateaued ~41 %). The fix is what llama.cpp does: quantize the
+staging all plateaued ~41 %). The fix is llama.cpp's approach: quantize the
 activations to Q8_1 (int8 + per-block scale) once, then do the Q4_0·Q8_1 dot with
 `dp4a.s32.s32` (int8 DP4A, inline PTX — no stdlib dp4a on sm_86), unpacking
-nibbles with a `0x0F0F0F0F` mask. This uses the int8 ALU throughput and makes the
-kernel memory-bound, reaching 62–93 % of spec. Our kernel also runs down_proj
-(K=14336), which MAX crashes on. This is the upstreamable H1 deliverable; the
-remaining question upstream is why MAX's shipping Q4_0 path does not do this on
-consumer Ampere (see `reports/open-questions.md`).
+nibbles with a `0x0F0F0F0F` mask. Remaining work: close the last ~10 % to
+llama.cpp, and M>1.
+
+## Corrections (adversarial review)
+
+The first pass of this report claimed "MAX 6–15 % / ours 6–10× faster / MAX
+crashes on down_proj." A review showed the MAX column had been measured through a
+*forced* `multistage_gemm_q` config (128×128×32) rather than MAX's real
+dispatcher, that clocks were not proven per run, and that llama.cpp was timed
+with CUDA graphs on (1 kernel instance). All three are fixed here: MAX is
+measured via `matmul_gpu_qint4[g32]` (real per-shape config), the SM clock is
+sampled under load and recorded per JSON (1695), and llama.cpp runs with graphs
+disabled (131 instances). The corrected picture is above.
 
 ## Reproduce
 
 ```
-# lock clocks on the Windows host (admin): nvidia-smi -lgc 1695,1695
+# lock clocks on the Windows host (admin): nvidia-smi -lgc 1695,1695  (verified per run)
 uv run python -m bench.run_bw_probe --locked-clock 1695            # measured roofline
-scripts/sweep_gemv.sh 815.5 1695                                   # fp16/bf16 sweep
-uv run python -m bench.run_gemv_max --shape o_proj --fmt Q4_0 --M 1 --locked-clock 1695 --measured-gbps 815.5
-for s in 1024 4096 16384; do uv run python -m bench.run_attention_max --seq $s --locked-clock 1695 --measured-gbps 815.5; done
+scripts/sweep_gemv.sh 816.3 1695                                   # MAX dense fp16/bf16
+# Q4_0, three impls (MAX via its REAL dispatcher; ours; llama.cpp graphs-off):
+for s in o_proj qkv_fused down_proj up_proj gate_up lm_head; do
+  uv run python -m bench.run_gemv_max_dispatch --shape $s --M 1 --locked-clock 1695 --measured-gbps 816.3
+  uv run python -m bench.run_gemv_ours         --shape $s --M 1 --locked-clock 1695 --measured-gbps 816.3
+  uv run python -m bench.run_gemv_llamacpp     --shape $s --M 1 --locked-clock 1695 --measured-gbps 816.3
+done
+for s in 1024 4096 16384; do uv run python -m bench.run_attention_max --seq $s --locked-clock 1695 --measured-gbps 816.3; done
 uv run python -m bench.report                                      # regenerate tables
 ```

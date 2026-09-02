@@ -1,5 +1,20 @@
 # MAX GPU Q4_0 (int4) matmul on consumer Ampere: design bias vs. defects
 
+> **Correction (after measuring MAX's REAL dispatch).** Sections below were first
+> written against a harness that FORCED `multistage_gemm_q` at 128×128×32 for all
+> shapes. MAX's real dispatcher (`matmul_gpu_qint4[g32]`, static K/N) picks
+> per-shape configs: up_proj/down_proj get a decode BM=16/BK=32 config and run
+> well (69–81 % of roofline, **no crash**); gate_up/lm_head fall to the default
+> 128×128 tile (~15 %); o_proj/qkv have BK=128 tuned configs and **compile-fail**
+> for g32. So: (1) the **K=14336 crash is a LATENT bug** (unmasked A load,
+> Section 3) that the forced BM=128 exposed but the real BM=16 dispatch does NOT
+> hit — the "MAX crashes on down_proj" framing is retracted; (2) the **slowness
+> is only on the default-config shapes**, not universal; (3) the **compile
+> failure is real** for o_proj/qkv. The M=1 = 0.78 % utilization figure below is
+> for the forced BM=128 tile; the real default-config path is the same tile, so
+> it stands for gate_up/lm_head. See reports/h0-results.md for the real numbers.
+
+
 Scope: `modular/max/kernels/src/quantization/qmatmul_gpu.mojo` and its callers.
 Hardware: RTX 3090 (sm_86). MAX 26.5.0. All runs use `bench/mojo/qgemv_max`,
 which repacks Q4_0 once and calls MAX's `multistage_gemm_q` directly.

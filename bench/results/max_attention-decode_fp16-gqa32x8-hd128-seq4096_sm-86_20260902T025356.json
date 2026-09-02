@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "impl": "max",
+  "kernel": "attention_decode",
+  "variant": "fp16_gqa32x8_hd128_seq4096",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 3090",
+    "arch": "sm_86",
+    "compute_capability": "8.6",
+    "sms": 82,
+    "driver": "610.62",
+    "cuda_driver_version": "13.3",
+    "graphics_clock_mhz_current": 1695,
+    "graphics_clock_mhz_max": 2100,
+    "graphics_clock_mhz_locked": 1695,
+    "mem_clock_mhz": 9751,
+    "mem_clock_mhz_max": 9751,
+    "mem_clock_locked": false,
+    "power_limit_w": 420.0,
+    "graphics_clock_mhz_observed": {
+      "min": 1695,
+      "max": 1695,
+      "median": 1695,
+      "n": 76
+    }
+  },
+  "shape": {
+    "batch": 1,
+    "q_heads": 32,
+    "kv_heads": 8,
+    "head_dim": 128,
+    "seq_len": 4096,
+    "page_size": 128
+  },
+  "dtype": {
+    "kv": "fp16",
+    "q": "fp16",
+    "accum": "fp32"
+  },
+  "bytes_moved": 16777216,
+  "flops": 67108864,
+  "timing": {
+    "source": "nsys_gpukernsum",
+    "n_instances": 262,
+    "launches_per_sample": 0,
+    "median_us": 29.05,
+    "q1_us": 0,
+    "q3_us": 0,
+    "min_us": 27.459,
+    "p95_us": 0,
+    "nsys_mean_us": 29.004,
+    "harness_wallclock_median_us": 52.931,
+    "kernels": [
+      {
+        "name": "mha_decoding_depth128_float16_float16_16x128x32_True_nqh32_nkvh8_6f96a9cc",
+        "instances": 131,
+        "avg_us": 26.6595
+      },
+      {
+        "name": "mha_splitk_reduce_float16_float16_57fed817",
+        "instances": 131,
+        "avg_us": 2.3445
+      }
+    ]
+  },
+  "achieved_gbps": 577.53,
+  "achieved_tflops": 2.31,
+  "roofline": {
+    "spec_gbps": 936.0,
+    "measured_gbps": 816.3,
+    "pct_spec": 61.7,
+    "pct_measured": 70.7
+  },
+  "correctness": {
+    "validated": true,
+    "l2_rel_err": 0.00037812174,
+    "max_abs_err": 0.0007324219,
+    "max_rel_err": 0.001472751,
+    "tolerance": "l2_rel<2e-2 (vs mha_gpu_naive)"
+  },
+  "env": {
+    "mojo_version": "1.0.0",
+    "max_version": "26.5.0",
+    "modular_sha": "b4497b7ce9ba96331c72c637ad41b44bab374f33",
+    "cuda_version": "13.3",
+    "llamacpp_sha": "",
+    "flashinfer_version": "unknown",
+    "harness_sha": "c251359282a08c1f22a8349cbc89328166758ad3-dirty",
+    "timestamp_utc": "2026-09-02T02:53:56.305613+00:00"
+  },
+  "notes": "nsys-authoritative; kernel(s): mha_decoding_depth128_float16_float16_16x128x32_True_nqh32_nkvh8_6f96a9cc, mha_splitk_reduce_float16_float16_57fed817. correctness vs mha_gpu_naive. harness wall-clock median 52.931 us (1.8x nsys). "
+}
