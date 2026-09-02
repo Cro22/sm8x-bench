@@ -59,10 +59,13 @@ def main() -> int:
     # Disable ggml CUDA graphs so nsys sees every launch as a distinct kernel
     # instance (with graphs the whole replay collapses to 1 instance -> the
     # "median" would be a single observation, not comparable to ours/MAX's 120).
-    cmd = ["env", "GGML_CUDA_DISABLE_GRAPHS=1", str(DRIVER), str(N), str(K), str(M),
+    # Passed via env= (not an `env` cmd prefix, which nsys profiles instead of
+    # following into the driver).
+    cmd = [str(DRIVER), str(N), str(K), str(M),
            str(p["W"]), str(p["x"]), str(p["ref"])]
     print(f"profiling under nsys: llama.cpp {args.shape} Q4_0 M{M} ...")
-    rows = nsys.kernel_summary(cmd, cwd=_REPO)
+    rows = nsys.kernel_summary(cmd, cwd=_REPO,
+                               env={"GGML_CUDA_DISABLE_GRAPHS": "1"})
     meta = rows[0]
     out = meta.get("__stdout__", "")
     if meta.get("__returncode__", 1) != 0:

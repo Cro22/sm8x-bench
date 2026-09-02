@@ -56,7 +56,7 @@ def _sample_sm_clock_until(proc, timeout: int) -> dict:
 
 
 def kernel_summary(cmd: list[str], cwd: Path | str | None = None,
-                   timeout: int = 900) -> list[dict]:
+                   timeout: int = 900, env: dict | None = None) -> list[dict]:
     """Run `cmd` under nsys, then generate the GPU kernel summary explicitly and
     parse it. Returns the GPU kernel rows, each:
     {name, instances, total_ns, avg_ns, med_ns, min_ns, max_ns, stddev_ns}.
@@ -74,12 +74,16 @@ def kernel_summary(cmd: list[str], cwd: Path | str | None = None,
         # durations anyway. We Popen (not run) so we can sample the actual SM
         # clock WHILE the kernel executes — provenance that the clock really was
         # locked, rather than trusting the CLI arg or an idle post-hoc reading.
+        run_env = None
+        if env:
+            import os as _os
+            run_env = {**_os.environ, **env}
         proc = subprocess.Popen(
             ["nsys", "profile", "--force-overwrite=true",
              "--trace=cuda", "--sample=none", "--cpuctxsw=none",
              "-o", str(rep), *cmd],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-            cwd=str(cwd) if cwd else None,
+            cwd=str(cwd) if cwd else None, env=run_env,
         )
         clk_samples = _sample_sm_clock_until(proc, timeout)
         out, err = proc.communicate()

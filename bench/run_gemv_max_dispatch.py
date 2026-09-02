@@ -79,7 +79,8 @@ def main() -> int:
         print(f"COMPILE-FAIL (real MAX limitation). wrote {path}")
         return 0
 
-    cmd = [str(binary), str(N), str(K), str(M),
+    # harness argv order is: M N K W x ref [rtol] [atol]
+    cmd = [str(binary), str(M), str(N), str(K),
            str(p["W"]), str(p["x"]), str(p["ref"])]
     print(f"profiling under nsys: MAX real-dispatch {args.shape} Q4_0 M{M} ...")
     rows = nsys.kernel_summary(cmd, cwd=_REPO)
