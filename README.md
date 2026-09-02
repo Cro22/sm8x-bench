@@ -76,6 +76,14 @@ memory-bound** — hence 15 %. And for group_size 32 with a BK=128 tuned config
 compile failure is a *bug*. Full design-vs-bug analysis with file:line:
 **[reports/max-q4_0-analysis.md](reports/max-q4_0-analysis.md)**.
 
+The compile failure is reproduced through the **public** dispatcher
+(`matmul_gpu_qint4[group_size=32]`, not a forced config): `32 // BK(128) == 0`
+→ an `int_tuple` out-of-bounds at `qmatmul_gpu.mojo:873`. It is a genuine MAX
+limitation, not a harness setup error — the *identical* harness at the same
+`group_size=32` compiles and runs validated for up_proj/down_proj (BK=32 configs)
+and fails only on o_proj/qkv. The full compiler output is committed alongside each
+compile-fail JSON as `bench/results/max_gemv_Q4-0-M1-{o_proj,qkv_fused}.compile_error.txt`.
+
 Our kernel does what llama.cpp does: quantize the activations to **Q8_1** once,
 then compute the Q4_0·Q8_1 dot with **`dp4a` int8 multiply-accumulate** (emitted
 as inline PTX — the Mojo stdlib has no `dp4a` on sm_86), unpacking nibbles with a

@@ -167,10 +167,15 @@ results JSON.
 
 ## Anomalies and caveats
 
-- **Q4_0 compile-fail for group_size 32 (o_proj/qkv), real.** Their tuned
-  m≤32 config uses BK=128, so `group_size // BK = 32 // 128 = 0` → zero-sized
-  scales dim → comptime crash. The table shows these as `compile-fail`.
-  up_proj/down_proj (BK=32 configs) compile fine. See `reports/open-questions.md`.
+- **Q4_0 compile-fail for group_size 32 (o_proj/qkv), real — reproduced through
+  the public dispatcher.** Their tuned m≤32 config uses BK=128, so
+  `group_size // BK = 32 // 128 = 0` → an `int_tuple` out-of-bounds at
+  `qmatmul_gpu.mojo:873` (full compiler output committed as the
+  `results/*.compile_error.txt` sidecars). It is a MAX limitation, not a harness
+  setup error: the *identical* harness at the same `group_size=32` compiles and
+  runs validated for up_proj/down_proj (BK=32 configs) and fails only on
+  o_proj/qkv. The table shows these as `compile-fail`. See
+  `reports/open-questions.md`.
 - **The earlier "down_proj crashes" claim is RETRACTED.** That
   CUDA_ERROR_ILLEGAL_ADDRESS came from a first harness that *forced* the BM=128
   default config; MAX's real dispatch for down_proj uses BM=16 and runs cleanly
