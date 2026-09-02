@@ -71,3 +71,18 @@ group_size=32 on sm_86 — so that shape has no working Q4_0 GPU path at all. Th
 shapes that DO run (K=4096) measure 6-15% of the memory roofline (166 us at
 N=4096 up to 2094 us at N=128256), ~4x slower than the fp16 GEMV. See
 bench/results/max_gemv_Q4*.json.
+
+ROOT CAUSE (see reports/max-q4_0-analysis.md, both bugs are cheap fixes):
+- **Crash (B):** the A-tile `cp.async` load in `multistage_mma_q` has no `m < M`
+  mask (only the epilogue masks, qmatmul_gpu.mojo:939/1022). With M < BM (=128 at
+  decode) the load reads up to `(BM-1)*K` elements past the `[M,K]` A buffer;
+  it faults only when that over-read (∝K) crosses an unmapped page — latent at
+  K=4096, fatal at K=14336. PROVEN: over-allocating A to 128 rows makes the crash
+  vanish and returns a correct result. Wrong on any GPU. Likely KERN-2339 class.
+- **Compile failure (A):** dispatch has no `group_size % BK` guard, so
+  group_size=32 with a g128-tuned config (BK=128) hits `32 // 128 == 0` → a
+  zero-sized scales-layout dim → comptime crash. The tuned table is a
+  GPTQ/AWQ g128 table; g32 (GGUF Q4_0) is second-class on the GPU path.
+- **Slowness (not a bug):** the kernel is a tensor-core GEMM tiled for large M;
+  at M=1 it uses 1/128 of the M-tile (0.78%). Intentional throughput/datacenter
+  design; MAX has no GEMV/decode-specialized quant kernel on NVIDIA.
