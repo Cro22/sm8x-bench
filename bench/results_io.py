@@ -38,6 +38,32 @@ def _slug(s: str) -> str:
     return "".join(c if c.isalnum() else "-" for c in str(s)).strip("-")
 
 
+def write_status(*, impl: str, kernel: str, variant: str, shape: dict,
+                 status: str, notes: str = "", gpu_index: int = 0) -> Path:
+    """Record a NON-measured outcome (e.g. 'compile_fail', 'crash') as a results
+    JSON so the report shows an honest N/A with a reason instead of a hand-typed
+    cell. No timing/roofline — those are null."""
+    gpu = _env.capture_gpu(gpu_index)
+    envblock = _env.capture_env()
+    record = {
+        "schema": SCHEMA_VERSION, "impl": impl, "kernel": kernel,
+        "variant": variant, "status": status, "gpu": gpu, "shape": shape,
+        "dtype": {}, "bytes_moved": None, "flops": None,
+        "timing": {"median_us": None}, "achieved_gbps": None,
+        "achieved_tflops": None,
+        "roofline": {"spec_gbps": None, "measured_gbps": None,
+                     "pct_spec": None, "pct_measured": None},
+        "correctness": {"validated": False},
+        "env": envblock, "notes": notes,
+    }
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    ts = envblock["timestamp_utc"].replace(":", "").replace("-", "").split(".")[0]
+    fname = f"{_slug(impl)}_{_slug(kernel)}_{_slug(variant)}_{_slug(gpu['arch'])}_{ts}.json"
+    path = RESULTS_DIR / fname
+    path.write_text(json.dumps(record, indent=2))
+    return path
+
+
 def write_result(
     *,
     impl: str,

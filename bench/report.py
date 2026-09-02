@@ -56,11 +56,22 @@ def table(records: list[dict], arch: str, kernel: str) -> str:
     lines = [hdr, sep]
     for r in rows:
         t, rf, c = r["timing"], r["roofline"], r["correctness"]
+        # Non-measured outcome (compile-fail, crash) -> honest N/A row with reason.
+        if r.get("status") or t.get("median_us") is None:
+            reason = r.get("status", "n/a").replace("_", "-")
+            lines.append(
+                f"| {r['impl']} | {r.get('variant','')} | {_shape_str(kernel, r['shape'])} "
+                f"| {reason} | — | — | — | — | — | — | [json]({r['_file']}) |")
+            continue
         l2 = c.get("l2_rel_err")
+        med = t["median_us"]
+        ag = r.get("achieved_gbps")
+        ps = rf.get("pct_spec")
         lines.append(
             f"| {r['impl']} | {r.get('variant','')} | {_shape_str(kernel, r['shape'])} "
-            f"| {t['median_us']:.2f} | {t.get('min_us',0):.2f} "
-            f"| {r['achieved_gbps']:.0f} | {rf['pct_spec']:.1f} "
+            f"| {med:.2f} | {t.get('min_us',0):.2f} "
+            f"| {('%.0f' % ag) if ag is not None else '—'} "
+            f"| {('%.1f' % ps) if ps is not None else '—'} "
             f"| {('%.1f' % rf['pct_measured']) if rf.get('pct_measured') is not None else '—'} "
             f"| {('%.1e' % l2) if l2 is not None else '—'} "
             f"| {'yes' if c.get('validated') else 'NO'} "
