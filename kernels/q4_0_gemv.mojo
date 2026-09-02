@@ -26,26 +26,38 @@
 #   1) quantize_x_q8_1: x[K] (bf16) -> per-32-block int8 quants q8[K], plus
 #      per-block scale xd[b] = amax/127 and xs[b] = xd[b]*sum(q8_block). Done
 #      ONCE and reused across all N rows.
-#   2) q4_0_gemv_kernel: ONE WARP per output row; each LANE owns whole Q4_0
-#      blocks (block b handled by lane b%32, stride 32). Per block it loads the
-#      16 nibble-bytes as one 128-bit vector, unpacks low/high nibbles into four
-#      int32 nibble-packs each (mask 0x0F0F0F0F), loads the 32 matching int8 x
-#      quants (8 int32), and does 8 DP4A to get the integer dot
-#      D = sum_j q4_j * q8_j. The block's contribution is
-#        d_w * (xd[b]*D - 8*xs[b])
+#   2) q4_0_gemv_kernel: each WARP computes ROWS_PER_WARP consecutive output
+#      rows; each LANE owns whole Q4_0 blocks (block b handled by lane b%32,
+#      stride 32). Per block it loads the 16 nibble-bytes as one 128-bit vector,
+#      unpacks low/high nibbles into four int32 nibble-packs each (mask
+#      0x0F0F0F0F), loads the 32 matching int8 x quants (8 int32) ONCE, and does
+#      8 DP4A per row to get the integer dot D = sum_j q4_j * q8_j. The block's
+#      contribution to row r is
+#        d_w[r] * (xd[b]*D[r] - 8*xs[b])
 #      since sum_j (q4_j-8)*(xd*q8_j) = xd*D - 8*xd*sum(q8) = xd*D - 8*xs.
 #   Consecutive lanes read consecutive 18-byte blocks, so the warp sweeps a
 #   contiguous region -> coalesced, every Q4_0 byte read once.
 #
-# Comptime knobs (retune later): ROWS_PER_BLOCK (warps per CTA). Best on sm_86
-# (RTX 3090) is ROWS_PER_BLOCK=1 across the canonical shapes (lm_head prefers it
-# clearly; o_proj is within noise of 2). See the sweep in reports.
+# Comptime knobs: ROWS_PER_WARP (rows/warp) and ROWS_PER_BLOCK (warps/CTA). More
+# rows/warp gives each warp that many INDEPENDENT weight-load chains (the shared
+# x-quants are loaded once), which is the memory-level parallelism that lifts the
+# bandwidth-bound GEMV off its ~66% plateau; too many starves the small shapes of
+# warps. Tuned per shape in the harness dispatch (bench/mojo/q4_0_gemv_ours.mojo):
+# small/mid N want RPW=4; the two near-roofline giants want RPW=2, RPB=2.
 #
-# Measured (sm_86, locked 1695 MHz, nsys, incl. the quantize pass), M=1:
-#   shape     median us   % spec roofline   (fp32-dequant baseline -> now)
-#   o_proj      16.3         ~62%           (35.8% -> 62%)
-#   up_proj     43.1         ~82%           (39.9% -> 82%)
-#   lm_head    337           ~94%           (43.2% -> 94%)
+# Measured (sm_86 RTX 3090, locked 1695 MHz, nsys, incl. the quantize pass), M=1,
+# per-shape tuned RPW/RPB. "% spec" of the 936 GB/s spec bandwidth; llama.cpp's
+# mul_mat_vec_q on the same weights shown for reference (median over runs):
+#   shape       ours %spec   llama %spec   (RPW1 baseline -> tuned)
+#   o_proj        71.1          71.2       (62 -> 71)   tie; quantize-launch bound
+#   qkv_fused     78.5          77.4       (66 -> 79)   beats llama
+#   up_proj       87.0          84.6       (81 -> 87)   beats llama
+#   down_proj     87.3          89.1       (66 -> 87)   long-K; -1.8, near parity
+#   gate_up       94.3          93.5       (88 -> 94)   beats llama
+#   lm_head       99.0          95.6       (91 -> 99)   beats llama
+# The residual o_proj/down_proj gap is the fixed ~2 us quantize-pass launch (same
+# two-kernel structure llama.cpp uses); folding it into the GEMV was measured
+# ~2x SLOWER (register-serial per-lane quantize doesn't hide), so it stays split.
 # ===----------------------------------------------------------------------=== #
 
 from std.gpu import thread_idx, block_idx, block_dim
@@ -108,7 +120,7 @@ def quantize_x_q8_1[
 
 
 def q4_0_gemv_kernel[
-    N: Int, K: Int, ROWS_PER_BLOCK: Int
+    N: Int, K: Int, ROWS_PER_BLOCK: Int, ROWS_PER_WARP: Int = 1
 ](
     y: Pointer[Float32, MutAnyOrigin],       # [N] fp32 output
     w: Pointer[UInt8, MutAnyOrigin],         # [N, (K/32)*18] raw Q4_0 bytes
@@ -116,45 +128,58 @@ def q4_0_gemv_kernel[
     xd: Pointer[Float32, MutAnyOrigin],      # [K/32] per-block x scale
     xs: Pointer[Float32, MutAnyOrigin],      # [K/32] per-block xd*sum(q8)
 ):
+    # ONE WARP computes ROWS_PER_WARP consecutive output rows. The int8 x-quants
+    # (q8/xd/xs) for a block are loaded ONCE and reused across all ROWS_PER_WARP
+    # rows; each row keeps its own accumulator and its own weight-load stream, so
+    # a warp has ROWS_PER_WARP independent DRAM-load chains in flight. That extra
+    # memory-level parallelism is what lifts a bandwidth-bound GEMV that stalls at
+    # ~66% of roofline (one load chain per warp) toward the roofline. N is a
+    # multiple of ROWS_PER_WARP for every canonical shape -> no per-row tail.
+    comptime assert N % ROWS_PER_WARP == 0, "N must be a multiple of ROWS_PER_WARP"
     comptime NBLOCKS = K // GROUP_SIZE            # Q4_0 blocks per row
     comptime ROW_BYTES = NBLOCKS * GROUP_BYTES    # raw bytes per weight row
     comptime FULL = NBLOCKS // WARP_SIZE          # whole 32-block warp sweeps
 
     var warp_id = thread_idx.x // WARP_SIZE
     var lane = thread_idx.x % WARP_SIZE
-    var n = block_idx.x * ROWS_PER_BLOCK + warp_id
-    if n >= N:
+    var warp_global = block_idx.x * ROWS_PER_BLOCK + warp_id
+    var n0 = warp_global * ROWS_PER_WARP          # first output row of this warp
+    if n0 >= N:
         return
 
-    var row_base = n * ROW_BYTES
-    var acc: Float32 = 0.0
+    var acc = InlineArray[Float32, ROWS_PER_WARP](fill=0.0)
+    var mask = SIMD[DType.int32, 4](0x0F0F0F0F)
 
     @parameter
     @always_inline
     def process(b: Int):
-        var blk = row_base + b * GROUP_BYTES
-        var d_w = w.unsafe_bitcast[Scalar[DType.float16]]().unsafe_load(
-            blk // 2
-        ).cast[DType.float32]()
-        # 16 nibble-bytes -> four int32 words (128-bit vector load, 2-aligned).
-        var qb = w.unsafe_load[width=16, alignment=2](blk + 2)
-        var words = bitcast[DType.int32, 4](qb)
-        var mask = SIMD[DType.int32, 4](0x0F0F0F0F)
-        var lo = words & mask              # weights 0..15  (4 int8 per lane)
-        var hi = (words >> 4) & mask       # weights 16..31
-        # 32 matching int8 x-quants -> eight int32.
+        # x-quants for this 32-block: loaded ONCE, shared across the RPW rows.
         var qq = q8.unsafe_load[width=32, alignment=4](b * GROUP_SIZE)
         var qw = bitcast[DType.int32, 8](qq)
-        # integer dot D = sum_j q4_j * q8_j via 8 DP4A.
-        var dot: Int32 = 0
+        var xdb = xd.unsafe_load(b)
+        var xsb = xs.unsafe_load(b)
+        var blk = b * GROUP_BYTES
         @parameter
-        for k in range(4):
-            dot = dp4a(lo[k], qw[k], dot)
-        @parameter
-        for k in range(4):
-            dot = dp4a(hi[k], qw[k + 4], dot)
-        # contribution: d_w * (xd[b]*D - 8*xs[b])
-        acc += d_w * (xd.unsafe_load(b) * Float32(dot) - 8.0 * xs.unsafe_load(b))
+        for r in range(ROWS_PER_WARP):
+            var wblk = (n0 + r) * ROW_BYTES + blk
+            var d_w = w.unsafe_bitcast[Scalar[DType.float16]]().unsafe_load(
+                wblk // 2
+            ).cast[DType.float32]()
+            # 16 nibble-bytes -> four int32 words (128-bit vector load, 2-aligned).
+            var qb = w.unsafe_load[width=16, alignment=2](wblk + 2)
+            var words = bitcast[DType.int32, 4](qb)
+            var lo = words & mask              # weights 0..15  (4 int8 per lane)
+            var hi = (words >> 4) & mask       # weights 16..31
+            # integer dot D = sum_j q4_j * q8_j via 8 DP4A.
+            var dot: Int32 = 0
+            @parameter
+            for k in range(4):
+                dot = dp4a(lo[k], qw[k], dot)
+            @parameter
+            for k in range(4):
+                dot = dp4a(hi[k], qw[k + 4], dot)
+            # contribution: d_w * (xd[b]*D - 8*xs[b])
+            acc[r] += d_w * (xdb * Float32(dot) - 8.0 * xsb)
 
     for i in range(FULL):
         process(i * WARP_SIZE + lane)
@@ -162,6 +187,8 @@ def q4_0_gemv_kernel[
     if tb < NBLOCKS:
         process(tb)
 
-    var total = warp.sum(acc)
-    if lane == 0:
-        y.unsafe_store(n, total)
+    @parameter
+    for r in range(ROWS_PER_WARP):
+        var total = warp.sum(acc[r])
+        if lane == 0:
+            y.unsafe_store(n0 + r, total)

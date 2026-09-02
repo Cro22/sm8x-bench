@@ -31,11 +31,13 @@ shapes, close to llama.cpp.
   GGUF Q4_0 (group_size 32) on o_proj/qkv. MAX has no single decode-quant kernel
   that works well everywhere.
 - **Our Q4_0 GEMV** ([`kernels/q4_0_gemv.mojo`](kernels/q4_0_gemv.mojo)) —
-  **61–92 % of roofline on every shape, ~5–15 % behind llama.cpp, and it runs
-  even where MAX compile-fails.** It is ~6× faster than MAX only where MAX uses
-  the datacenter GEMM (gate_up/lm_head); MAX's decode config is competitive or
-  faster on down_proj. Not categorically faster than MAX — the value is a single
-  kernel that is uniformly near-roofline.
+  **71–99 % of roofline on every shape, beating llama.cpp on four of six, and
+  faster than MAX on all six.** After tuning (multiple output rows per warp for
+  memory-level parallelism + a per-shape launch config) it beats llama.cpp on
+  qkv/up_proj/gate_up/lm_head, ties it on o_proj, and is within 1.8 % on down_proj;
+  vs MAX it is ~6× faster on gate_up/lm_head, ahead on up_proj/down_proj, and runs
+  the two shapes MAX compile-fails. A single kernel that is uniformly near-roofline
+  where MAX is absent, 15 %, or (at best) 81 %.
 
 ### Q4_0 decode GEMV, three implementations, same weights, same measurement
 
@@ -47,17 +49,18 @@ from the results JSON (see the linked tables); this summary is rounded.
 
 | Llama-3-8B shape (N×K) | MAX (real dispatch) | **ours** | llama.cpp |
 |---|---|---|---|
-| o_proj 4096×4096       | compile-fail (g32) | **16.6 µs / 61 %** | 14.3 µs / 71 % |
-| qkv 6144×4096          | compile-fail (g32) | **21.8 µs / 69 %** | 19.5 µs / 78 % |
-| down_proj 4096×14336   | 43.6 µs / 81 %     | **50.1 µs / 70 %** | 40.3 µs / 88 % |
-| up_proj 14336×4096     | 51.4 µs / 69 %     | **44.1 µs / 80 %** | 41.1 µs / 86 % |
-| gate_up 28672×4096     | 474 µs / 15 %      | **80.6 µs / 88 %** | 76.5 µs / 92 % |
-| lm_head 128256×4096    | 2057 µs / 15 %     | **344 µs / 92 %**  | 329 µs / 96 % |
+| o_proj 4096×4096       | compile-fail (g32) | **14.2 µs / 71.1 %** | 14.2 µs / 71.2 % |
+| qkv 6144×4096          | compile-fail (g32) | **19.3 µs / 78.5 %** | 19.6 µs / 77.4 % |
+| down_proj 4096×14336   | 43.5 µs / 81.2 %   | **40.5 µs / 87.3 %** | 39.6 µs / 89.1 % |
+| up_proj 14336×4096     | 51.6 µs / 68.4 %   | **40.6 µs / 87.0 %** | 41.8 µs / 84.6 % |
+| gate_up 28672×4096     | 474 µs / 14.9 %    | **74.9 µs / 94.3 %** | 75.5 µs / 93.5 % |
+| lm_head 128256×4096    | 2031 µs / 15.6 %   | **319 µs / 99.0 %**  | 331 µs / 95.6 % |
 
-llama.cpp is the fastest on every shape; ours is 5–15 % behind it; MAX is
-best-in-class on down_proj but compile-fails or drops to 15 % elsewhere. Full
-tables (dense fp16/bf16, attention, the bandwidth probe) with links to every
-results JSON: **[reports/h0-results.md](reports/h0-results.md)**.
+Ours beats llama.cpp on four of six shapes, ties o_proj, is within 1.8 % on
+down_proj, and is faster than MAX on all six. Medians of 3 passes (±0.3 % under a
+quiet GPU; a busy desktop widens it to ±3–5 %). Full tables (dense fp16/bf16,
+attention, the bandwidth probe) with links to every results JSON:
+**[reports/h0-results.md](reports/h0-results.md)**.
 
 ---
 
@@ -162,12 +165,12 @@ uv run python -m bench.report                                        # regenerat
   GEMM (15 %) for others, and a g32 compile failure for two. Secondary baselines
   (Q8_0/Q4_K, FlashInfer, cuBLAS) are not done yet — so "best CUDA baselines" so
   far means llama.cpp Q4_0 only.
-- **H1 (write the gap kernel):** our Q4_0 GEMV is 61–92 % of roofline on all six
-  shapes, ~5–15 % behind llama.cpp, and runs where MAX compile-fails or drops to
-  15 %. It does not beat MAX everywhere (MAX's decode config wins on down_proj).
-  M=1 only.
-- **Not yet:** M>1 for our kernel, closing the last ~10–15 % to llama.cpp,
-  sm_89 (no 4090 on the bench box), the secondary baselines, and preparing the
+- **H1 (write the gap kernel):** our Q4_0 GEMV is 71–99 % of roofline on all six
+  shapes — beating llama.cpp on four (qkv/up_proj/gate_up/lm_head), tying o_proj,
+  within 1.8 % on down_proj — and faster than MAX on all six, including the two
+  MAX compile-fails and the two where MAX drops to 15 %. M=1 only.
+- **Not yet:** M>1 for our kernel, the residual quantize-launch overhead on the
+  smallest shapes, sm_89 (no 4090 on the bench box), the secondary baselines, and preparing the
   upstream contribution.
 
 This record was corrected after an adversarial review found the first pass had

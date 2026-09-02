@@ -31,7 +31,12 @@ from std.sys.arg import argv
 comptime WARMUP = 10
 comptime SAMPLES = 12
 comptime PER_BATCH = 10
-comptime ROWS_PER_BLOCK = 1  # best of {1,2,4,8} sweep for the DP4A kernel
+# Per-shape (ROWS_PER_WARP, ROWS_PER_BLOCK) is chosen in main()'s dispatch. The
+# two knobs trade memory-level parallelism (rows/warp -> independent weight-load
+# chains, reusing the shared x-quants) against occupancy granularity (warps/CTA).
+# Tuned on sm_86 (RTX 3090, locked 1695 MHz) by sweeping {1,2,4,8}^2 per canonical
+# shape: small-N shapes want more rows/warp for MLP; the two largest shapes are
+# already near roofline and prefer low counts (RPW=2, RPB=2). See reports.
 
 
 def median_of(list: List[Float64]) -> Float64:
@@ -50,7 +55,7 @@ def median_of(list: List[Float64]) -> Float64:
 
 
 def run[
-    N: Int, K: Int
+    N: Int, K: Int, ROWS_PER_WARP: Int, ROWS_PER_BLOCK: Int
 ](
     w_path: String, x_path: String, ref_path: String,
     rtol: Float32, atol: Float32,
@@ -104,7 +109,8 @@ def run[
         var xs_ptr = xs_dev.unsafe_ptr()
 
         comptime BLOCK = WARP_SIZE * ROWS_PER_BLOCK
-        comptime GRID = (N + ROWS_PER_BLOCK - 1) // ROWS_PER_BLOCK
+        comptime ROWS_PER_CTA = ROWS_PER_BLOCK * ROWS_PER_WARP
+        comptime GRID = (N + ROWS_PER_CTA - 1) // ROWS_PER_CTA
         comptime QUANT_BLOCK = 128  # one warp per 32-elem block -> K threads
         comptime QUANT_GRID = (K + QUANT_BLOCK - 1) // QUANT_BLOCK
 
@@ -118,7 +124,7 @@ def run[
                 grid_dim=QUANT_GRID, block_dim=QUANT_BLOCK)
             # 2) Q4_0 . Q8_1 DP4A GEMV.
             ctx.enqueue_function[
-                q4_0_gemv_kernel[N, K, ROWS_PER_BLOCK]
+                q4_0_gemv_kernel[N, K, ROWS_PER_BLOCK, ROWS_PER_WARP]
             ](y_ptr, w_ptr, q8_ptr, xd_ptr, xs_ptr,
               grid_dim=GRID, block_dim=BLOCK)
 
@@ -172,7 +178,8 @@ def run[
                 line += ","
             line += String(samples[i])
         print(line)
-        print("median_us=", median_of(samples), " rows_per_block=", ROWS_PER_BLOCK)
+        print("median_us=", median_of(samples), " rows_per_warp=", ROWS_PER_WARP,
+          " rows_per_block=", ROWS_PER_BLOCK)
 
 
 def main() raises:
@@ -194,17 +201,18 @@ def main() raises:
         print("this GEMV kernel supports M==1 only for now; got M=", M)
         return
 
-    if N == 4096 and K == 4096:
-        run[4096, 4096](w_path, x_path, ref_path, rtol, atol)
-    elif N == 6144 and K == 4096:
-        run[6144, 4096](w_path, x_path, ref_path, rtol, atol)
-    elif N == 4096 and K == 14336:
-        run[4096, 14336](w_path, x_path, ref_path, rtol, atol)
-    elif N == 14336 and K == 4096:
-        run[14336, 4096](w_path, x_path, ref_path, rtol, atol)
-    elif N == 28672 and K == 4096:
-        run[28672, 4096](w_path, x_path, ref_path, rtol, atol)
-    elif N == 128256 and K == 4096:
-        run[128256, 4096](w_path, x_path, ref_path, rtol, atol)
+    # Per-shape tuned (ROWS_PER_WARP, ROWS_PER_BLOCK), sm_86 sweep (see header).
+    if N == 4096 and K == 4096:            # o_proj
+        run[4096, 4096, 4, 4](w_path, x_path, ref_path, rtol, atol)
+    elif N == 6144 and K == 4096:          # qkv_fused
+        run[6144, 4096, 4, 8](w_path, x_path, ref_path, rtol, atol)
+    elif N == 4096 and K == 14336:         # down_proj
+        run[4096, 14336, 4, 8](w_path, x_path, ref_path, rtol, atol)
+    elif N == 14336 and K == 4096:         # up_proj
+        run[14336, 4096, 4, 8](w_path, x_path, ref_path, rtol, atol)
+    elif N == 28672 and K == 4096:         # gate_up
+        run[28672, 4096, 2, 2](w_path, x_path, ref_path, rtol, atol)
+    elif N == 128256 and K == 4096:        # lm_head
+        run[128256, 4096, 2, 2](w_path, x_path, ref_path, rtol, atol)
     else:
         print("unsupported (N,K):", N, K, "- add a static run[N,K] dispatch arm")
