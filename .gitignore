@@ -16,6 +16,9 @@ bench/mojo/gemv_max
 bench/mojo/qgemv_max
 bench/mojo/attn_max
 bench/mojo/q4_0_gemv_ours
+bench/mojo/qgemv_max
+bench/mojo/qgemv_max_dispatch
+bench/mojo/qgemv_max_dispatch_*
 bench/mojo/*_bin
 
 # Local baselines source/build trees (large; rebuilt from pinned SHAs).

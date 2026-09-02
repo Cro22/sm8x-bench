@@ -40,6 +40,16 @@ def git_sha(repo: Path) -> str:
     if sha is None:
         return "unknown"
     dirty = _run(["git", "status", "--porcelain"], cwd=repo)
+    # "-dirty" should reflect uncommitted CODE, not the results/inputs a run
+    # necessarily produces (those are untracked/committed after the fact). Ignore
+    # generated-output paths so harness_sha names the exact code that ran.
+    if dirty:
+        ignore = ("bench/results/", "bench/inputs/", "bench/mojo/gemv_max",
+                  "bench/mojo/qgemv_max", "bench/mojo/attn_max",
+                  "bench/mojo/q4_0_gemv_ours", "bench/baselines/llamacpp/gemv_bench")
+        real = [ln for ln in dirty.splitlines()
+                if not any(p in ln for p in ignore)]
+        dirty = "\n".join(real)
     return sha + ("-dirty" if dirty else "")
 
 
