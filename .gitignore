@@ -45,3 +45,4 @@ bench/inputs/
 # OS / editor
 .idea/
 .DS_Store
+bench/baselines/llamacpp/gemv_bench
