@@ -3,15 +3,18 @@
 **Status: partial.** All MAX kernels (GEMV/matmul fp16/bf16, Q4_0 via its real
 dispatcher, attention decode), the measured roofline, the **llama.cpp Q4_0/Q8_0/
 Q4_K GEMV baselines**, the **cuBLAS fp16 GEMV** dense ceiling, and **our Q4_0
-kernel** are done on the RTX 3090, all under a per-run-verified 1695 MHz clock.
-Remaining baselines (llama.cpp flash-attn, FlashInfer decode) are pending. This
-report was corrected after an adversarial review (see "Corrections" below).
+kernel**, and the **FlashInfer decode-attention baseline** are done on the RTX
+3090, all under a per-run-verified 1695 MHz clock. The one remaining baseline
+(llama.cpp flash-attn) is pending. This report was corrected after an adversarial
+review (see "Corrections" below).
 
 ## Result
 
 On the RTX 3090 (sm_86), MAX's dense decode GEMV is at the memory-bandwidth limit
 (fp16/bf16 M=1 at **90–97 % of spec** across all projection shapes) and its
-attention decode is near the limit at long context (**86 % of spec at 16k**). Its
+attention decode is near the limit at long context (**86.7 % of spec at 16k**) but
+leaves **~18 points on the table at seq 4096** (61.7 % vs FlashInfer's 79.3 % — a
+gap partly confounded by MAX's paged vs FlashInfer's contiguous KV; see caveats). Its
 **Q4_0 (4-bit)** path, measured through its real dispatcher, is **uneven**: a
 decode-tuned config gives **69–81 %** on up_proj/down_proj, but shapes that fall
 to the default 128×128 GEMM tile (gate_up/lm_head) run at **~15 %**, and
@@ -140,8 +143,11 @@ results JSON.
 
 | Impl | Variant | Shape | Median µs | min µs | GB/s | % spec | % meas | L2 err | Validated | JSON |
 |---|---|---|---|---|---|---|---|---|---|---|
+| flashinfer | fp16_gqa32x8_hd128_seq1024 | seq1024 gqa32x8 hd128 | 16.61 | 16.52 | 252 | 27.0 | 30.9 | 3.0e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq1024_sm-86_20260902T234151.json) |
 | max | fp16_gqa32x8_hd128_seq1024 | seq1024 gqa32x8 hd128 | 17.95 | 17.74 | 234 | 25.0 | 28.6 | 4.5e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq1024_sm-86_20260902T025352.json) |
+| flashinfer | fp16_gqa32x8_hd128_seq4096 | seq4096 gqa32x8 hd128 | 22.59 | 22.30 | 743 | 79.3 | 91.0 | 3.6e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq4096_sm-86_20260902T234207.json) |
 | max | fp16_gqa32x8_hd128_seq4096 | seq4096 gqa32x8 hd128 | 29.05 | 27.46 | 578 | 61.7 | 70.7 | 3.8e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq4096_sm-86_20260902T025356.json) |
+| flashinfer | fp16_gqa32x8_hd128_seq16384 | seq16384 gqa32x8 hd128 | 79.96 | 79.20 | 839 | 89.7 | 102.8 | 3.5e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq16384_sm-86_20260902T234214.json) |
 | max | fp16_gqa32x8_hd128_seq16384 | seq16384 gqa32x8 hd128 | 82.66 | 81.54 | 812 | 86.7 | 99.5 | 2.7e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq16384_sm-86_20260902T025400.json) |
 <!-- END GENERATED TABLES -->
 
@@ -200,13 +206,20 @@ results JSON.
   rows read slightly **above the 936 GB/s nominal spec** (up to ~104 %): the shape
   is pure weight streaming and the GDDR6X sustains marginally over the nominal
   figure — `% spec` is normalized to that nominal, not capped at it.
-- **Attention decode: bandwidth-bound-optimal at long context.** seq 16384 hits
-  86.5 % of spec (99 % of measured roofline); seq 4096 is 60 %; seq 1024 is 24 %.
-  The short-context numbers are latency-bound, not a kernel deficiency — at seq
-  1024 only ~4 MiB of KV is read, too little to saturate 936 GB/s given the
-  split-K parallelism available (8 kv-heads × partitions across 82 SMs).
-  Validated against MAX's own `mha_gpu_naive` (L2 err ~5e-4). No gap here; the
-  audit's "decode is a real tensor-core flash-decoding kernel on sm_86" holds.
+- **Attention decode: MAX at long context, but a mid-context gap vs FlashInfer.**
+  MAX `mha_decoding` (+`mha_splitk_reduce`): seq 16384 **86.7 %** of spec, seq 4096
+  **61.7 %**, seq 1024 **25.0 %** (validated vs MAX's own `mha_gpu_naive`, L2
+  ~5e-4). Short context is latency-bound (at seq 1024 only ~4 MiB of KV is read,
+  too little to saturate the bus). **But FlashInfer's decode on the same GQA
+  32/8, hd128 shapes reaches 27.0 / 79.3 / 89.7 %** — at/above MAX everywhere, and
+  **+17.6 points at seq 4096 (79.3 vs 61.7)**. So the earlier "no attention gap"
+  read is *revised*: at mid context MAX leaves ~18 points on the table that a
+  competitor captures. **Caveat (confound):** FlashInfer here reads **contiguous**
+  KV (`single_decode_with_kv_cache`) while MAX reads **paged** KV (page 128) — part
+  of the seq-4096 gap could be paging overhead, not kernel quality. A paged
+  FlashInfer run (`BatchDecodeWithPagedKVCacheWrapper`, page 128) would disambiguate
+  and is the open follow-up. Both are nsys per-kernel, clock 1695, L2 ~3e-4;
+  FlashInfer 0.6.18 / torch 2.14+cu130 in a separate `.venv-attn`.
 
 ## Anomalies and caveats
 

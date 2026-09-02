@@ -25,7 +25,6 @@ bench/mojo/*_bin
 # Keep bench/baselines/<name>/{PIN, *.cpp, *.py} committed; ignore src/ and build/.
 baselines-src/
 llama.cpp/
-flashinfer/
 bench/baselines/*/src/
 bench/baselines/*/build/
 
@@ -48,3 +47,4 @@ bench/inputs/
 bench/baselines/llamacpp/gemv_bench
 bench/baselines/llamacpp/quantize_weight
 bench/baselines/cublas/cublas_gemv
+.venv-attn/

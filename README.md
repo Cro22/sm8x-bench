@@ -175,8 +175,11 @@ uv run python -m bench.report                                        # regenerat
   have no MAX GPU counterpart — CPU-only upstream). The **cuBLAS fp16 GEMV** dense
   ceiling is measured too — and at M=1 cuBLAS falls to a tensor-core GEMM tile on
   five of six shapes, so **MAX's split-K fp16 GEMV actually beats cuBLAS** there
-  (e.g. o_proj 90.6 % vs 79.2 %). Remaining baselines (llama.cpp flash-attn,
-  FlashInfer decode) are not done yet.
+  (e.g. o_proj 90.6 % vs 79.2 %). The **FlashInfer decode-attention** baseline is
+  done and surfaces a real finding: MAX matches it at long context (86.7 % at
+  seq 16384) but trails at seq 4096 (**61.7 % vs 79.3 %**) — a mid-context gap
+  (partly confounded by MAX's paged vs FlashInfer's contiguous KV; a paged
+  FlashInfer run is the open follow-up). Only llama.cpp flash-attn remains.
 - **H1 (write the gap kernel):** our Q4_0 GEMV is 71–99 % of roofline on all six
   shapes — beating llama.cpp on four (qkv/up_proj/gate_up/lm_head), tying o_proj,
   within 1.8 % on down_proj — and faster than MAX on all six, including the two

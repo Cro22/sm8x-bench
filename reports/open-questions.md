@@ -96,3 +96,24 @@ measuring MAX's REAL dispatch (not a forced config):
   128x128 tile (gate_up/lm_head) run at ~15% at M=1 (1/128 M-tile utilization).
   MAX has no single decode-quant kernel that is uniformly good; that is the
   design gap, not a bug.
+
+## MAX attention decode: mid-context gap vs FlashInfer (seq 4096)
+
+MAX `mha_decoding` decode attention (GQA 32/8, hd128, fp16 KV, batch 1) is at the
+roofline at long context (86.7% of spec at seq 16384) but only **61.7%** at seq
+4096, while **FlashInfer** on the same shapes hits **79.3%** — a **+17.6-point**
+gap that MAX leaves on the table at mid context. This revises the earlier
+"attention has no gap" reading.
+
+**Open question / confound:** the FlashInfer number uses **contiguous** KV
+(`single_decode_with_kv_cache`); MAX reads **paged** KV (page 128). Part of the
+seq-4096 gap could be paging overhead rather than kernel efficiency. To
+disambiguate, run FlashInfer's paged path (`BatchDecodeWithPagedKVCacheWrapper`,
+page_size 128) at the same shapes:
+- If paged FlashInfer stays ~79%, the gap is a real MAX `mha_decoding`
+  mid-context inefficiency worth investigating upstream (likely split-K partition
+  count / occupancy at seq 4096 on 82 SMs).
+- If paged FlashInfer drops toward ~62%, the gap is the paged-read pattern, and
+  MAX's kernel is fine — the finding then is about paging cost, not the kernel.
+Either outcome is a concrete, useful result. (Both measured nsys per-kernel,
+clock 1695; FlashInfer 0.6.18 / torch 2.14+cu130.)
