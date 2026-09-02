@@ -68,9 +68,27 @@ def main() -> int:
     if b.returncode != 0:
         # Expected for o_proj/qkv: tuned m<=16/m<=32 config is BK=128, and
         # group_size(32)//BK(128)==0 -> comptime failure. Real MAX limitation.
-        tail = (b.stderr or b.stdout).strip().splitlines()
-        reason = "group_size//BK==0 (BK=128 g128-tuned config)" if any(
-            "int_tuple" in l or "out-of-bounds" in l for l in tail) else "build failed"
+        # Save the full compiler output next to the JSON so the record is
+        # self-documenting (not just "build failed"), and lift the concrete
+        # signature (the failing config's BK/group_size + the int_tuple
+        # out-of-bounds) into the note.
+        full = (b.stderr or "") + "\n" + (b.stdout or "")
+        lines = full.strip().splitlines()
+        log = binary.parent.parent / "results" / f"max_gemv_Q4-0-M{M}-{args.shape}.compile_error.txt"
+        try:
+            log.write_text(full)
+        except OSError:
+            pass
+        oob = any("int_tuple" in l or "out-of-bounds" in l for l in lines)
+        cfg = next((l.strip()[:200] for l in lines
+                    if '"BK"' in l and '"group_size"' in l), "")
+        if oob:
+            reason = "group_size//BK==0 (real dispatch picked a BK=128 config; " \
+                     "32//128==0 -> int_tuple out-of-bounds at qmatmul_gpu.mojo)"
+            if cfg:
+                reason += f" | failing config: {cfg}"
+        else:
+            reason = "build failed (see .compile_error.txt sidecar)"
         path = write_status(
             impl="max", kernel="gemv", variant=f"Q4_0_M{M}_{args.shape}",
             shape={"M": M, "N": N, "K": K}, status="compile_fail",

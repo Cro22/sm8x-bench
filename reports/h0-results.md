@@ -76,7 +76,7 @@ results JSON.
 | Impl | Variant | Shape | Median µs | min µs | GB/s | % spec | % meas | L2 err | Validated | JSON |
 |---|---|---|---|---|---|---|---|---|---|---|
 | llamacpp | Q4_0_M1_o_proj | M1 4096x4096 | 14.18 | 14.03 | 667 | 71.2 | 81.7 | 1.1e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-o-proj_sm-86_20260902T024855.json) |
-| max | Q4_0_M1_o_proj | M1 4096x4096 | compile-fail | — | — | — | — | — | — | [json](bench/results/max_gemv_Q4-0-M1-o-proj_sm-86_20260902T024847.json) |
+| max | Q4_0_M1_o_proj | M1 4096x4096 | compile-fail | — | — | — | — | — | — | [json](bench/results/max_gemv_Q4-0-M1-o-proj_sm-86_20260902T224746.json) |
 | max | bf16_M1_o_proj | M1 4096x4096 | 39.58 | 39.27 | 848 | 90.6 | 103.9 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M1-o-proj_sm-86_20260902T025217.json) |
 | max | fp16_M1_o_proj | M1 4096x4096 | 39.59 | 39.31 | 848 | 90.6 | 103.9 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-o-proj_sm-86_20260902T025209.json) |
 | ours | Q4_0_M1_o_proj | M1 4096x4096 | 14.20 | 13.74 | 666 | 71.1 | 81.5 | 5.3e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-o-proj_sm-86_20260902T223709.json) |
@@ -86,7 +86,7 @@ results JSON.
 | max | fp16_M1_down_proj | M1 4096x14336 | 134.01 | 133.23 | 877 | 93.7 | 107.4 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-down-proj_sm-86_20260902T025241.json) |
 | ours | Q4_0_M1_down_proj | M1 4096x14336 | 40.45 | 39.59 | 817 | 87.3 | 100.1 | 5.5e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-down-proj_sm-86_20260902T223720.json) |
 | llamacpp | Q4_0_M1_qkv_fused | M1 6144x4096 | 19.57 | 19.38 | 724 | 77.4 | 88.8 | 1.2e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-qkv-fused_sm-86_20260902T024921.json) |
-| max | Q4_0_M1_qkv_fused | M1 6144x4096 | compile-fail | — | — | — | — | — | — | [json](bench/results/max_gemv_Q4-0-M1-qkv-fused_sm-86_20260902T024914.json) |
+| max | Q4_0_M1_qkv_fused | M1 6144x4096 | compile-fail | — | — | — | — | — | — | [json](bench/results/max_gemv_Q4-0-M1-qkv-fused_sm-86_20260902T224804.json) |
 | max | bf16_M1_qkv_fused | M1 6144x4096 | 57.55 | 57.34 | 875 | 93.5 | 107.2 | 1.6e-03 | yes | [json](bench/results/max_gemv_bf16-M1-qkv-fused_sm-86_20260902T025233.json) |
 | max | fp16_M1_qkv_fused | M1 6144x4096 | 57.53 | 57.34 | 875 | 93.5 | 107.2 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-qkv-fused_sm-86_20260902T025225.json) |
 | ours | Q4_0_M1_qkv_fused | M1 6144x4096 | 19.29 | 18.95 | 735 | 78.5 | 90.0 | 5.5e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-qkv-fused_sm-86_20260902T223738.json) |

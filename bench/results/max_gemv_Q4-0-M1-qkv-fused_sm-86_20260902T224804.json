@@ -2,7 +2,7 @@
   "schema": 1,
   "impl": "max",
   "kernel": "gemv",
-  "variant": "Q4_0_M1_o_proj",
+  "variant": "Q4_0_M1_qkv_fused",
   "status": "compile_fail",
   "gpu": {
     "name": "NVIDIA GeForce RTX 3090",
@@ -21,7 +21,7 @@
   },
   "shape": {
     "M": 1,
-    "N": 4096,
+    "N": 6144,
     "K": 4096
   },
   "dtype": {},
@@ -48,8 +48,8 @@
     "cuda_version": "13.3",
     "llamacpp_sha": "",
     "flashinfer_version": "unknown",
-    "harness_sha": "87cf13a80db748d553022b625098aefbfbe33699",
-    "timestamp_utc": "2026-09-02T02:48:47.279526+00:00"
+    "harness_sha": "d4151459b99f30c81e0ed6225dc94018f35fea18-dirty",
+    "timestamp_utc": "2026-09-02T22:48:04.881865+00:00"
   },
-  "notes": "matmul_gpu_qint4[g32] real dispatch does not compile: build failed"
+  "notes": "matmul_gpu_qint4[g32] real dispatch does not compile: group_size//BK==0 (real dispatch picked a BK=128 config; 32//128==0 -> int_tuple out-of-bounds at qmatmul_gpu.mojo) | failing config: max/kernels/src/quantization/qmatmul_gpu.mojo:873:6: note: call expansion failed with parameter value(s): (\"BN\": 64, \"BK\": 128, \"WM\": 16, \"WN\": 64, \"num_threads\": 32, \"num_pipeline_stages\": 3, \"transp"
 }

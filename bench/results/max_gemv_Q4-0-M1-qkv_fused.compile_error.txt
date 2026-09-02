@@ -1,0 +1,125 @@
+/home/jesus/projects/sm8x-bench/bench/mojo/qgemv_max_dispatch.mojo:1:1: error: failed to run the pass manager for offload functions
+# ===----------------------------------------------------------------------=== #
+^
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: error: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: note: call expansion failed with parameter value(s): (..., ..., ..., ..., ..., ..., "group_size": 32, "pack_factor": 8, "transpose_b": True, ..., ...)
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: note: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:873:6: note: call expansion failed with parameter value(s): ("BN": 64, "BK": 128, "WM": 16, "WN": 64, "num_threads": 32, "num_pipeline_stages": 3, "transpose_b": True, "group_size": 32, "pack_factor": 8, ..., ..., ..., ..., ..., ..., ..., ..., ..., ..., ..., "swizzle_a": True, "prefetch_init": True, ..., ..., ..., "c.masked`5": False, "c.alignment`6": 4, "a_iter_arg.mut`7": False, ..., "a_iter_arg.address_space`11": 0, "a_iter_arg.circular`13": False, ..., ..., "a_iter_arg.masked`17": True, "b_iter_arg.mut`18": False, "b_iter_arg.address_space`21": 0, "b_iter_arg.circular`23": False, ..., ..., "b_iter_arg.masked`27": False, "a_smem_iter_arg.alignment`30": 16, "a_smem_iter_arg.circular`31": True, ..., ..., "a_smem_iter_arg.masked`35": False, "b_smem_iter.alignment`38": 4, "b_smem_iter.circular`39": True, ..., ..., "b_smem_iter.masked`43": False, "scales_smem_iter_arg.mut`45": True, "scales_smem_iter_arg.alignment`48": 2, "scales_smem_iter_arg.circular`49": True, ..., ..., "scales_smem_iter_arg.masked`53": False, "scales_iter_arg.mut`54": False, "scales_iter_arg.address_space`57": 0, "scales_iter_arg.circular`59": False, ..., ..., "scales_iter_arg.masked`63": False)
+max/kernels/src/quantization/qmatmul_gpu.mojo:105:5: note: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:537:26: note: call expansion failed with parameter value(s): ("mut": True, ..., ..., "address_space": 3, ..., ..., ..., "masked": False, "alignment": 2, ..., ..., ...)
+max/kernels/src/layout/layout_tensor.mojo:3958:9: note: function instantiation failed
+max/kernels/src/layout/layout_tensor.mojo:4080:22: note: failed to compile-time evaluate function call
+max/kernels/src/layout/int_tuple.mojo:1140:9: note: failed to interpret function @layout::int_tuple::IntTuple::__getitem__(::IntTuple,::SIMD[::DType(int), ::SIMDLength(1)])
+max/kernels/src/layout/int_tuple.mojo:1153:35: note: failed to evaluate call
+max/kernels/src/layout/int_tuple.mojo:1156:9: note: failed to interpret function @layout::int_tuple::IntTuple::_unchecked_get(::IntTuple,::SIMD[::DType(int), ::SIMDLength(1)])
+max/kernels/src/layout/int_tuple.mojo:1158:30: note: call expansion failed
+max/kernels/src/layout/int_tuple.mojo:199:41: note: failed to interpret operation pop.load{isInvariant: false, isNonTemporal: false, isVolatile: false, ordering: #pop<atomic_ordering not_atomic>}(#interp.pointer<1000000208> : !kgen.pointer<scalar<index>>)
+max/kernels/src/layout/int_tuple.mojo:1158:30: note: call expansion failed
+max/kernels/src/layout/int_tuple.mojo:199:41: note: address is out-of-bounds: 1000000208
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: error: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: note: call expansion failed with parameter value(s): (..., ..., ..., ..., ..., ..., "group_size": 32, "pack_factor": 8, "transpose_b": True, ..., ...)
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: note: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:873:6: note: call expansion failed with parameter value(s): ("BN": 64, "BK": 128, "WM": 16, "WN": 64, "num_threads": 32, "num_pipeline_stages": 3, "transpose_b": True, "group_size": 32, "pack_factor": 8, ..., ..., ..., ..., ..., ..., ..., ..., ..., ..., ..., "swizzle_a": True, "prefetch_init": True, ..., ..., ..., "c.masked`5": False, "c.alignment`6": 4, "a_iter_arg.mut`7": False, ..., "a_iter_arg.address_space`11": 0, "a_iter_arg.circular`13": False, ..., ..., "a_iter_arg.masked`17": True, "b_iter_arg.mut`18": False, "b_iter_arg.address_space`21": 0, "b_iter_arg.circular`23": False, ..., ..., "b_iter_arg.masked`27": False, "a_smem_iter_arg.alignment`30": 16, "a_smem_iter_arg.circular`31": True, ..., ..., "a_smem_iter_arg.masked`35": False, "b_smem_iter.alignment`38": 4, "b_smem_iter.circular`39": True, ..., ..., "b_smem_iter.masked`43": False, "scales_smem_iter_arg.mut`45": True, "scales_smem_iter_arg.alignment`48": 2, "scales_smem_iter_arg.circular`49": True, ..., ..., "scales_smem_iter_arg.masked`53": False, "scales_iter_arg.mut`54": False, "scales_iter_arg.address_space`57": 0, "scales_iter_arg.circular`59": False, ..., ..., "scales_iter_arg.masked`63": False)
+max/kernels/src/quantization/qmatmul_gpu.mojo:105:5: note: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:537:26: note: call expansion failed with parameter value(s): ("mut": True, ..., ..., "address_space": 3, ..., ..., ..., "masked": False, "alignment": 2, ..., ..., ...)
+max/kernels/src/layout/layout_tensor.mojo:3958:9: note: function instantiation failed
+max/kernels/src/layout/layout_tensor.mojo:4080:22: note: failed to compile-time evaluate function call
+max/kernels/src/layout/int_tuple.mojo:1140:9: note: failed to interpret function @layout::int_tuple::IntTuple::__getitem__(::IntTuple,::SIMD[::DType(int), ::SIMDLength(1)])
+max/kernels/src/layout/int_tuple.mojo:1153:35: note: failed to evaluate call
+max/kernels/src/layout/int_tuple.mojo:1156:9: note: failed to interpret function @layout::int_tuple::IntTuple::_unchecked_get(::IntTuple,::SIMD[::DType(int), ::SIMDLength(1)])
+max/kernels/src/layout/int_tuple.mojo:1158:30: note: call expansion failed
+max/kernels/src/layout/int_tuple.mojo:199:41: note: failed to interpret operation pop.load{isInvariant: false, isNonTemporal: false, isVolatile: false, ordering: #pop<atomic_ordering not_atomic>}(#interp.pointer<1000000208> : !kgen.pointer<scalar<index>>)
+max/kernels/src/layout/int_tuple.mojo:1158:30: note: call expansion failed
+max/kernels/src/layout/int_tuple.mojo:199:41: note: address is out-of-bounds: 1000000208
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: error: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: note: call expansion failed with parameter value(s): (..., ..., ..., ..., ..., ..., "group_size": 32, "pack_factor": 8, "transpose_b": True, ..., ...)
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: note: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:873:6: note: call expansion failed with parameter value(s): ("BN": 64, "BK": 128, "WM": 16, "WN": 64, "num_threads": 32, "num_pipeline_stages": 4, "transpose_b": True, "group_size": 32, "pack_factor": 8, ..., ..., ..., ..., ..., ..., ..., ..., ..., ..., ..., "swizzle_a": True, "prefetch_init": True, ..., ..., ..., "c.masked`5": False, "c.alignment`6": 4, "a_iter_arg.mut`7": False, ..., "a_iter_arg.address_space`11": 0, "a_iter_arg.circular`13": False, ..., ..., "a_iter_arg.masked`17": True, "b_iter_arg.mut`18": False, "b_iter_arg.address_space`21": 0, "b_iter_arg.circular`23": False, ..., ..., "b_iter_arg.masked`27": False, "a_smem_iter_arg.alignment`30": 16, "a_smem_iter_arg.circular`31": True, ..., ..., "a_smem_iter_arg.masked`35": False, "b_smem_iter.alignment`38": 4, "b_smem_iter.circular`39": True, ..., ..., "b_smem_iter.masked`43": False, "scales_smem_iter_arg.mut`45": True, "scales_smem_iter_arg.alignment`48": 2, "scales_smem_iter_arg.circular`49": True, ..., ..., "scales_smem_iter_arg.masked`53": False, "scales_iter_arg.mut`54": False, "scales_iter_arg.address_space`57": 0, "scales_iter_arg.circular`59": False, ..., ..., "scales_iter_arg.masked`63": False)
+max/kernels/src/quantization/qmatmul_gpu.mojo:105:5: note: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:537:26: note: call expansion failed with parameter value(s): ("mut": True, ..., ..., "address_space": 3, ..., ..., ..., "masked": False, "alignment": 2, ..., ..., ...)
+max/kernels/src/layout/layout_tensor.mojo:3958:9: note: function instantiation failed
+max/kernels/src/layout/layout_tensor.mojo:4080:22: note: failed to compile-time evaluate function call
+max/kernels/src/layout/int_tuple.mojo:1140:9: note: failed to interpret function @layout::int_tuple::IntTuple::__getitem__(::IntTuple,::SIMD[::DType(int), ::SIMDLength(1)])
+max/kernels/src/layout/int_tuple.mojo:1153:35: note: failed to evaluate call
+max/kernels/src/layout/int_tuple.mojo:1156:9: note: failed to interpret function @layout::int_tuple::IntTuple::_unchecked_get(::IntTuple,::SIMD[::DType(int), ::SIMDLength(1)])
+max/kernels/src/layout/int_tuple.mojo:1158:30: note: call expansion failed
+max/kernels/src/layout/int_tuple.mojo:199:41: note: failed to interpret operation pop.load{isInvariant: false, isNonTemporal: false, isVolatile: false, ordering: #pop<atomic_ordering not_atomic>}(#interp.pointer<1000000208> : !kgen.pointer<scalar<index>>)
+max/kernels/src/layout/int_tuple.mojo:1158:30: note: call expansion failed
+max/kernels/src/layout/int_tuple.mojo:199:41: note: address is out-of-bounds: 1000000208
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: error: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: note: call expansion failed with parameter value(s): (..., ..., ..., ..., ..., ..., "group_size": 32, "pack_factor": 8, "transpose_b": True, ..., ...)
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: note: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:873:6: note: call expansion failed with parameter value(s): ("BN": 64, "BK": 128, "WM": 16, "WN": 64, "num_threads": 32, "num_pipeline_stages": 4, "transpose_b": True, "group_size": 32, "pack_factor": 8, ..., ..., ..., ..., ..., ..., ..., ..., ..., ..., ..., "swizzle_a": True, "prefetch_init": True, ..., ..., ..., "c.masked`5": False, "c.alignment`6": 4, "a_iter_arg.mut`7": False, ..., "a_iter_arg.address_space`11": 0, "a_iter_arg.circular`13": False, ..., ..., "a_iter_arg.masked`17": True, "b_iter_arg.mut`18": False, "b_iter_arg.address_space`21": 0, "b_iter_arg.circular`23": False, ..., ..., "b_iter_arg.masked`27": False, "a_smem_iter_arg.alignment`30": 16, "a_smem_iter_arg.circular`31": True, ..., ..., "a_smem_iter_arg.masked`35": False, "b_smem_iter.alignment`38": 4, "b_smem_iter.circular`39": True, ..., ..., "b_smem_iter.masked`43": False, "scales_smem_iter_arg.mut`45": True, "scales_smem_iter_arg.alignment`48": 2, "scales_smem_iter_arg.circular`49": True, ..., ..., "scales_smem_iter_arg.masked`53": False, "scales_iter_arg.mut`54": False, "scales_iter_arg.address_space`57": 0, "scales_iter_arg.circular`59": False, ..., ..., "scales_iter_arg.masked`63": False)
+max/kernels/src/quantization/qmatmul_gpu.mojo:105:5: note: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:537:26: note: call expansion failed with parameter value(s): ("mut": True, ..., ..., "address_space": 3, ..., ..., ..., "masked": False, "alignment": 2, ..., ..., ...)
+max/kernels/src/layout/layout_tensor.mojo:3958:9: note: function instantiation failed
+max/kernels/src/layout/layout_tensor.mojo:4080:22: note: failed to compile-time evaluate function call
+max/kernels/src/layout/int_tuple.mojo:1140:9: note: failed to interpret function @layout::int_tuple::IntTuple::__getitem__(::IntTuple,::SIMD[::DType(int), ::SIMDLength(1)])
+max/kernels/src/layout/int_tuple.mojo:1153:35: note: failed to evaluate call
+max/kernels/src/layout/int_tuple.mojo:1156:9: note: failed to interpret function @layout::int_tuple::IntTuple::_unchecked_get(::IntTuple,::SIMD[::DType(int), ::SIMDLength(1)])
+max/kernels/src/layout/int_tuple.mojo:1158:30: note: call expansion failed
+max/kernels/src/layout/int_tuple.mojo:199:41: note: failed to interpret operation pop.load{isInvariant: false, isNonTemporal: false, isVolatile: false, ordering: #pop<atomic_ordering not_atomic>}(#interp.pointer<1000000208> : !kgen.pointer<scalar<index>>)
+max/kernels/src/layout/int_tuple.mojo:1158:30: note: call expansion failed
+max/kernels/src/layout/int_tuple.mojo:199:41: note: address is out-of-bounds: 1000000208
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: error: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: note: call expansion failed with parameter value(s): (..., ..., ..., ..., ..., ..., "group_size": 32, "pack_factor": 8, "transpose_b": True, ..., ...)
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: note: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:873:6: note: call expansion failed with parameter value(s): ("BN": 64, "BK": 128, "WM": 16, "WN": 64, "num_threads": 32, "num_pipeline_stages": 4, "transpose_b": True, "group_size": 32, "pack_factor": 8, ..., ..., ..., ..., ..., ..., ..., ..., ..., ..., ..., "swizzle_a": True, "prefetch_init": True, ..., ..., ..., "c.masked`5": False, "c.alignment`6": 4, "a_iter_arg.mut`7": False, ..., "a_iter_arg.address_space`11": 0, "a_iter_arg.circular`13": False, ..., ..., "a_iter_arg.masked`17": True, "b_iter_arg.mut`18": False, "b_iter_arg.address_space`21": 0, "b_iter_arg.circular`23": False, ..., ..., "b_iter_arg.masked`27": False, "a_smem_iter_arg.alignment`30": 16, "a_smem_iter_arg.circular`31": True, ..., ..., "a_smem_iter_arg.masked`35": False, "b_smem_iter.alignment`38": 4, "b_smem_iter.circular`39": True, ..., ..., "b_smem_iter.masked`43": False, "scales_smem_iter_arg.mut`45": True, "scales_smem_iter_arg.alignment`48": 2, "scales_smem_iter_arg.circular`49": True, ..., ..., "scales_smem_iter_arg.masked`53": False, "scales_iter_arg.mut`54": False, "scales_iter_arg.address_space`57": 0, "scales_iter_arg.circular`59": False, ..., ..., "scales_iter_arg.masked`63": False)
+max/kernels/src/quantization/qmatmul_gpu.mojo:105:5: note: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:537:26: note: call expansion failed with parameter value(s): ("mut": True, ..., ..., "address_space": 3, ..., ..., ..., "masked": False, "alignment": 2, ..., ..., ...)
+max/kernels/src/layout/layout_tensor.mojo:3958:9: note: function instantiation failed
+max/kernels/src/layout/layout_tensor.mojo:4080:22: note: failed to compile-time evaluate function call
+max/kernels/src/layout/int_tuple.mojo:1140:9: note: failed to interpret function @layout::int_tuple::IntTuple::__getitem__(::IntTuple,::SIMD[::DType(int), ::SIMDLength(1)])
+max/kernels/src/layout/int_tuple.mojo:1153:35: note: failed to evaluate call
+max/kernels/src/layout/int_tuple.mojo:1156:9: note: failed to interpret function @layout::int_tuple::IntTuple::_unchecked_get(::IntTuple,::SIMD[::DType(int), ::SIMDLength(1)])
+max/kernels/src/layout/int_tuple.mojo:1158:30: note: call expansion failed
+max/kernels/src/layout/int_tuple.mojo:199:41: note: failed to interpret operation pop.load{isInvariant: false, isNonTemporal: false, isVolatile: false, ordering: #pop<atomic_ordering not_atomic>}(#interp.pointer<1000000208> : !kgen.pointer<scalar<index>>)
+max/kernels/src/layout/int_tuple.mojo:1158:30: note: call expansion failed
+max/kernels/src/layout/int_tuple.mojo:199:41: note: address is out-of-bounds: 1000000208
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: error: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: note: call expansion failed with parameter value(s): (..., ..., ..., ..., ..., ..., "group_size": 32, "pack_factor": 8, "transpose_b": True, ..., ...)
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: note: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:873:6: note: call expansion failed with parameter value(s): ("BN": 64, "BK": 128, "WM": 16, "WN": 64, "num_threads": 64, "num_pipeline_stages": 3, "transpose_b": True, "group_size": 32, "pack_factor": 8, ..., ..., ..., ..., ..., ..., ..., ..., ..., ..., ..., "swizzle_a": True, "prefetch_init": True, ..., ..., ..., "c.masked`5": False, "c.alignment`6": 4, "a_iter_arg.mut`7": False, ..., "a_iter_arg.address_space`11": 0, "a_iter_arg.circular`13": False, ..., ..., "a_iter_arg.masked`17": True, "b_iter_arg.mut`18": False, "b_iter_arg.address_space`21": 0, "b_iter_arg.circular`23": False, ..., ..., "b_iter_arg.masked`27": False, "a_smem_iter_arg.alignment`30": 16, "a_smem_iter_arg.circular`31": True, ..., ..., "a_smem_iter_arg.masked`35": False, "b_smem_iter.alignment`38": 4, "b_smem_iter.circular`39": True, ..., ..., "b_smem_iter.masked`43": False, "scales_smem_iter_arg.mut`45": True, "scales_smem_iter_arg.alignment`48": 2, "scales_smem_iter_arg.circular`49": True, ..., ..., "scales_smem_iter_arg.masked`53": False, "scales_iter_arg.mut`54": False, "scales_iter_arg.address_space`57": 0, "scales_iter_arg.circular`59": False, ..., ..., "scales_iter_arg.masked`63": False)
+max/kernels/src/quantization/qmatmul_gpu.mojo:105:5: note: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:537:26: note: call expansion failed with parameter value(s): ("mut": True, ..., ..., "address_space": 3, ..., ..., ..., "masked": False, "alignment": 2, ..., ..., ...)
+max/kernels/src/layout/layout_tensor.mojo:3958:9: note: function instantiation failed
+max/kernels/src/layout/layout_tensor.mojo:4080:22: note: failed to compile-time evaluate function call
+max/kernels/src/layout/int_tuple.mojo:1140:9: note: failed to interpret function @layout::int_tuple::IntTuple::__getitem__(::IntTuple,::SIMD[::DType(int), ::SIMDLength(1)])
+max/kernels/src/layout/int_tuple.mojo:1153:35: note: failed to evaluate call
+max/kernels/src/layout/int_tuple.mojo:1156:9: note: failed to interpret function @layout::int_tuple::IntTuple::_unchecked_get(::IntTuple,::SIMD[::DType(int), ::SIMDLength(1)])
+max/kernels/src/layout/int_tuple.mojo:1158:30: note: call expansion failed
+max/kernels/src/layout/int_tuple.mojo:199:41: note: failed to interpret operation pop.load{isInvariant: false, isNonTemporal: false, isVolatile: false, ordering: #pop<atomic_ordering not_atomic>}(#interp.pointer<1000000208> : !kgen.pointer<scalar<index>>)
+max/kernels/src/layout/int_tuple.mojo:1158:30: note: call expansion failed
+max/kernels/src/layout/int_tuple.mojo:199:41: note: address is out-of-bounds: 1000000208
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: error: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: note: call expansion failed with parameter value(s): (..., ..., ..., ..., ..., ..., "group_size": 32, "pack_factor": 8, "transpose_b": True, ..., ...)
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: note: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:873:6: note: call expansion failed with parameter value(s): ("BN": 64, "BK": 128, "WM": 16, "WN": 64, "num_threads": 64, "num_pipeline_stages": 3, "transpose_b": True, "group_size": 32, "pack_factor": 8, ..., ..., ..., ..., ..., ..., ..., ..., ..., ..., ..., "swizzle_a": True, "prefetch_init": True, ..., ..., ..., "c.masked`5": False, "c.alignment`6": 4, "a_iter_arg.mut`7": False, ..., "a_iter_arg.address_space`11": 0, "a_iter_arg.circular`13": False, ..., ..., "a_iter_arg.masked`17": True, "b_iter_arg.mut`18": False, "b_iter_arg.address_space`21": 0, "b_iter_arg.circular`23": False, ..., ..., "b_iter_arg.masked`27": False, "a_smem_iter_arg.alignment`30": 16, "a_smem_iter_arg.circular`31": True, ..., ..., "a_smem_iter_arg.masked`35": False, "b_smem_iter.alignment`38": 4, "b_smem_iter.circular`39": True, ..., ..., "b_smem_iter.masked`43": False, "scales_smem_iter_arg.mut`45": True, "scales_smem_iter_arg.alignment`48": 2, "scales_smem_iter_arg.circular`49": True, ..., ..., "scales_smem_iter_arg.masked`53": False, "scales_iter_arg.mut`54": False, "scales_iter_arg.address_space`57": 0, "scales_iter_arg.circular`59": False, ..., ..., "scales_iter_arg.masked`63": False)
+max/kernels/src/quantization/qmatmul_gpu.mojo:105:5: note: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:537:26: note: call expansion failed with parameter value(s): ("mut": True, ..., ..., "address_space": 3, ..., ..., ..., "masked": False, "alignment": 2, ..., ..., ...)
+max/kernels/src/layout/layout_tensor.mojo:3958:9: note: function instantiation failed
+max/kernels/src/layout/layout_tensor.mojo:4080:22: note: failed to compile-time evaluate function call
+max/kernels/src/layout/int_tuple.mojo:1140:9: note: failed to interpret function @layout::int_tuple::IntTuple::__getitem__(::IntTuple,::SIMD[::DType(int), ::SIMDLength(1)])
+max/kernels/src/layout/int_tuple.mojo:1153:35: note: failed to evaluate call
+max/kernels/src/layout/int_tuple.mojo:1156:9: note: failed to interpret function @layout::int_tuple::IntTuple::_unchecked_get(::IntTuple,::SIMD[::DType(int), ::SIMDLength(1)])
+max/kernels/src/layout/int_tuple.mojo:1158:30: note: call expansion failed
+max/kernels/src/layout/int_tuple.mojo:199:41: note: failed to interpret operation pop.load{isInvariant: false, isNonTemporal: false, isVolatile: false, ordering: #pop<atomic_ordering not_atomic>}(#interp.pointer<1000000208> : !kgen.pointer<scalar<index>>)
+max/kernels/src/layout/int_tuple.mojo:1158:30: note: call expansion failed
+max/kernels/src/layout/int_tuple.mojo:199:41: note: address is out-of-bounds: 1000000208
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: error: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: note: call expansion failed with parameter value(s): (..., ..., ..., ..., ..., ..., "group_size": 32, "pack_factor": 8, "transpose_b": True, ..., ...)
+max/kernels/src/quantization/qmatmul_gpu.mojo:654:5: note: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:873:6: note: call expansion failed with parameter value(s): ("BN": 64, "BK": 128, "WM": 16, "WN": 64, "num_threads": 64, "num_pipeline_stages": 3, "transpose_b": True, "group_size": 32, "pack_factor": 8, ..., ..., ..., ..., ..., ..., ..., ..., ..., ..., ..., "swizzle_a": True, "prefetch_init": True, ..., ..., ..., "c.masked`5": False, "c.alignment`6": 4, "a_iter_arg.mut`7": False, ..., "a_iter_arg.address_space`11": 0, "a_iter_arg.circular`13": False, ..., ..., "a_iter_arg.masked`17": True, "b_iter_arg.mut`18": False, "b_iter_arg.address_space`21": 0, "b_iter_arg.circular`23": False, ..., ..., "b_iter_arg.masked`27": False, "a_smem_iter_arg.alignment`30": 16, "a_smem_iter_arg.circular`31": True, ..., ..., "a_smem_iter_arg.masked`35": False, "b_smem_iter.alignment`38": 4, "b_smem_iter.circular`39": True, ..., ..., "b_smem_iter.masked`43": False, "scales_smem_iter_arg.mut`45": True, "scales_smem_iter_arg.alignment`48": 2, "scales_smem_iter_arg.circular`49": True, ..., ..., "scales_smem_iter_arg.masked`53": False, "scales_iter_arg.mut`54": False, "scales_iter_arg.address_space`57": 0, "scales_iter_arg.circular`59": False, ..., ..., "scales_iter_arg.masked`63": False)
+max/kernels/src/quantization/qmatmul_gpu.mojo:105:5: note: function instantiation failed
+max/kernels/src/quantization/qmatmul_gpu.mojo:537:26: note: call expansion failed with parameter value(s): ("mut": True, ..., ..., "address_space": 3, ..., ..., ..., "masked": False, "alignment": 2, ..., ..., ...)
+max/kernels/src/layout/layout_tensor.mojo:3958:9: note: function instantiation failed
+max/kernels/src/layout/layout_tensor.mojo:4080:22: note: failed to compile-time evaluate function call
+max/kernels/src/layout/int_tuple.mojo:1140:9: note: failed to interpret function @layout::int_tuple::IntTuple::__getitem__(::IntTuple,::SIMD[::DType(int), ::SIMDLength(1)])
+max/kernels/src/layout/int_tuple.mojo:1153:35: note: failed to evaluate call
+max/kernels/src/layout/int_tuple.mojo:1156:9: note: failed to interpret function @layout::int_tuple::IntTuple::_unchecked_get(::IntTuple,::SIMD[::DType(int), ::SIMDLength(1)])
+max/kernels/src/layout/int_tuple.mojo:1158:30: note: call expansion failed
+max/kernels/src/layout/int_tuple.mojo:199:41: note: failed to interpret operation pop.load{isInvariant: false, isNonTemporal: false, isVolatile: false, ordering: #pop<atomic_ordering not_atomic>}(#interp.pointer<1000000208> : !kgen.pointer<scalar<index>>)
+max/kernels/src/layout/int_tuple.mojo:1158:30: note: call expansion failed
+max/kernels/src/layout/int_tuple.mojo:199:41: note: address is out-of-bounds: 1000000208
+/home/jesus/projects/sm8x-bench/.venv/bin/mojo: error: failed to run the pass manager
+
