@@ -30,6 +30,31 @@ def _num(s: str) -> float:
     return float(s.replace(",", ""))
 
 
+def _sample_sm_clock_until(proc, timeout: int) -> dict:
+    """Poll clocks.sm while `proc` runs; return {min,max,median,n} MHz observed.
+    This proves the graphics clock during the actual measurement (a locked GPU
+    holds its value under load; an idle/boosting reading exposes an unlocked run)."""
+    import time as _t
+    samples: list[int] = []
+    start = _t.monotonic()
+    while proc.poll() is None and (_t.monotonic() - start) < timeout:
+        try:
+            r = subprocess.run(
+                ["nvidia-smi", "--query-gpu=clocks.sm",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=5)
+            v = r.stdout.strip().splitlines()
+            if v:
+                samples.append(int(float(v[0])))
+        except Exception:
+            pass
+    if not samples:
+        return {"min": None, "max": None, "median": None, "n": 0}
+    samples.sort()
+    return {"min": samples[0], "max": samples[-1],
+            "median": samples[len(samples) // 2], "n": len(samples)}
+
+
 def kernel_summary(cmd: list[str], cwd: Path | str | None = None,
                    timeout: int = 900) -> list[dict]:
     """Run `cmd` under nsys, then generate the GPU kernel summary explicitly and
@@ -46,14 +71,18 @@ def kernel_summary(cmd: list[str], cwd: Path | str | None = None,
         # CUDA-only trace, no CPU sampling / context-switch tracing. On WSL the
         # default full trace makes nsys hang/crawl for minutes in teardown; with
         # these flags a profile completes in ~2 s. We only need GPU kernel
-        # durations anyway.
-        proc = subprocess.run(
+        # durations anyway. We Popen (not run) so we can sample the actual SM
+        # clock WHILE the kernel executes — provenance that the clock really was
+        # locked, rather than trusting the CLI arg or an idle post-hoc reading.
+        proc = subprocess.Popen(
             ["nsys", "profile", "--force-overwrite=true",
              "--trace=cuda", "--sample=none", "--cpuctxsw=none",
              "-o", str(rep), *cmd],
-            capture_output=True, text=True, cwd=str(cwd) if cwd else None,
-            timeout=timeout,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            cwd=str(cwd) if cwd else None,
         )
+        clk_samples = _sample_sm_clock_until(proc, timeout)
+        out, err = proc.communicate()
         repfile = rep.with_suffix(".nsys-rep")
         stats = subprocess.run(
             ["nsys", "stats", "--force-export=true",
@@ -62,7 +91,8 @@ def kernel_summary(cmd: list[str], cwd: Path | str | None = None,
         )
         text = stats.stdout + "\n" + stats.stderr
 
-    rows: list[dict] = [{"__stdout__": proc.stdout, "__returncode__": proc.returncode}]
+    rows: list[dict] = [{"__stdout__": out, "__returncode__": proc.returncode,
+                         "__sm_clock_mhz__": clk_samples}]
     # The kernel summary section is titled with "gpukernsum" or
     # "CUDA GPU Kernel Summary"; rows follow the header line. We match any data
     # row shaped like the kernel table and whose name isn't a memory op.

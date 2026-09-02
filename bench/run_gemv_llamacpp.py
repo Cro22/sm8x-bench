@@ -56,7 +56,10 @@ def main() -> int:
     pin = PIN.read_text().strip() if PIN.exists() else ""
     llamacpp_sha = pin.split("@")[-1].strip() if "@" in pin else pin
 
-    cmd = [str(DRIVER), str(N), str(K), str(M),
+    # Disable ggml CUDA graphs so nsys sees every launch as a distinct kernel
+    # instance (with graphs the whole replay collapses to 1 instance -> the
+    # "median" would be a single observation, not comparable to ours/MAX's 120).
+    cmd = ["env", "GGML_CUDA_DISABLE_GRAPHS=1", str(DRIVER), str(N), str(K), str(M),
            str(p["W"]), str(p["x"]), str(p["ref"])]
     print(f"profiling under nsys: llama.cpp {args.shape} Q4_0 M{M} ...")
     rows = nsys.kernel_summary(cmd, cwd=_REPO)
@@ -118,6 +121,7 @@ def main() -> int:
                      "tolerance": "l2_rel<3e-2 (vs our fp32 dequant ref)"},
         graphics_clock_mhz_locked=args.locked_clock,
         mem_clock_locked=False,
+        observed_sm_clock=meta.get("__sm_clock_mhz__"),
         measured_gbps=args.measured_gbps,
         llamacpp_sha=llamacpp_sha,
         notes=note,

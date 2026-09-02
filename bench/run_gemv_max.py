@@ -163,6 +163,7 @@ def main() -> int:
                      + (" (M>1 GEMM path may use fp16 accumulation)" if M > 1 else "")},
         graphics_clock_mhz_locked=args.locked_clock,
         mem_clock_locked=False,
+        observed_sm_clock=meta.get("__sm_clock_mhz__"),
         measured_gbps=args.measured_gbps,
         notes=note,
         gpu_index=args.gpu_index,

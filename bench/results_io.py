@@ -51,6 +51,7 @@ def write_result(
     flops: int = 0,
     graphics_clock_mhz_locked: int | None = None,
     mem_clock_locked: bool = False,
+    observed_sm_clock: dict | None = None,
     measured_gbps: float | None = None,
     llamacpp_sha: str = "",
     flashinfer_version: str = "",
@@ -70,6 +71,17 @@ def write_result(
     if graphics_clock_mhz_locked is not None:
         gpu["graphics_clock_mhz_locked"] = graphics_clock_mhz_locked
     gpu["mem_clock_locked"] = mem_clock_locked
+    # Provenance: the SM clock actually observed under load during the timed run
+    # (from bench.nsys sampling). A locked GPU holds this; deviation = the run
+    # was NOT at the claimed clock. This replaces trusting the CLI arg.
+    if observed_sm_clock is not None:
+        gpu["graphics_clock_mhz_observed"] = observed_sm_clock
+        med = observed_sm_clock.get("median")
+        lk = graphics_clock_mhz_locked
+        if med is not None and lk and abs(med - lk) / lk > 0.03:
+            gpu["clock_lock_warning"] = (
+                f"observed SM clock median {med} MHz != locked {lk} MHz "
+                f"(range {observed_sm_clock.get('min')}-{observed_sm_clock.get('max')})")
 
     arch = gpu["arch"]
     median_us = timing["median_us"]

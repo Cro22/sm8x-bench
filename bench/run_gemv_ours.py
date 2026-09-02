@@ -116,6 +116,7 @@ def main() -> int:
                      "max_abs_err": max_abs, "max_rel_err": max_rel,
                      "tolerance": "l2_rel<3e-2 (vs fp32 dequant ref)"},
         graphics_clock_mhz_locked=args.locked_clock, mem_clock_locked=False,
+        observed_sm_clock=meta.get("__sm_clock_mhz__"),
         measured_gbps=args.measured_gbps, notes=note, gpu_index=args.gpu_index,
     )
     print(f"wrote {path}")
