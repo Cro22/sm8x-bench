@@ -1,11 +1,11 @@
 # H0 results — MAX kernels on consumer NVIDIA GPUs
 
 **Status: partial.** All MAX kernels (GEMV/matmul fp16/bf16, Q4_0 via its real
-dispatcher, attention decode), the measured roofline, the **llama.cpp Q4_0
-baseline**, and **our Q4_0 kernel** are done on the RTX 3090, all under a
-per-run-verified 1695 MHz clock. Remaining baselines (llama.cpp Q8_0/Q4_K +
-flash-attn, FlashInfer, cuBLAS) are pending. This report was corrected after an
-adversarial review (see "Corrections" below).
+dispatcher, attention decode), the measured roofline, the **llama.cpp Q4_0/Q8_0/
+Q4_K GEMV baselines**, and **our Q4_0 kernel** are done on the RTX 3090, all under
+a per-run-verified 1695 MHz clock. Remaining baselines (llama.cpp flash-attn,
+FlashInfer decode, cuBLAS fp16 GEMV) are pending. This report was corrected after
+an adversarial review (see "Corrections" below).
 
 ## Result
 
@@ -76,31 +76,43 @@ results JSON.
 | Impl | Variant | Shape | Median µs | min µs | GB/s | % spec | % meas | L2 err | Validated | JSON |
 |---|---|---|---|---|---|---|---|---|---|---|
 | llamacpp | Q4_0_M1_o_proj | M1 4096x4096 | 14.18 | 14.03 | 667 | 71.2 | 81.7 | 1.1e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-o-proj_sm-86_20260902T024855.json) |
+| llamacpp | Q4_K_M1_o_proj | M1 4096x4096 | 13.67 | 13.35 | 692 | 73.9 | 84.7 | 5.3e-03 | yes | [json](bench/results/llamacpp_gemv_Q4-K-M1-o-proj_sm-86_20260902T230119.json) |
+| llamacpp | Q8_0_M1_o_proj | M1 4096x4096 | 23.84 | 23.68 | 748 | 80.0 | 91.7 | 5.3e-03 | yes | [json](bench/results/llamacpp_gemv_Q8-0-M1-o-proj_sm-86_20260902T225903.json) |
 | max | Q4_0_M1_o_proj | M1 4096x4096 | compile-fail | — | — | — | — | — | — | [json](bench/results/max_gemv_Q4-0-M1-o-proj_sm-86_20260902T224746.json) |
 | max | bf16_M1_o_proj | M1 4096x4096 | 39.58 | 39.27 | 848 | 90.6 | 103.9 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M1-o-proj_sm-86_20260902T025217.json) |
 | max | fp16_M1_o_proj | M1 4096x4096 | 39.59 | 39.31 | 848 | 90.6 | 103.9 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-o-proj_sm-86_20260902T025209.json) |
 | ours | Q4_0_M1_o_proj | M1 4096x4096 | 14.20 | 13.74 | 666 | 71.1 | 81.5 | 5.3e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-o-proj_sm-86_20260902T223709.json) |
 | llamacpp | Q4_0_M1_down_proj | M1 4096x14336 | 39.64 | 39.48 | 834 | 89.1 | 102.2 | 1.4e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-down-proj_sm-86_20260902T024934.json) |
+| llamacpp | Q4_K_M1_down_proj | M1 4096x14336 | 41.57 | 41.25 | 795 | 85.0 | 97.5 | 5.5e-03 | yes | [json](bench/results/llamacpp_gemv_Q4-K-M1-down-proj_sm-86_20260902T230153.json) |
+| llamacpp | Q8_0_M1_down_proj | M1 4096x14336 | 67.17 | 66.88 | 929 | 99.3 | 113.9 | 5.5e-03 | yes | [json](bench/results/llamacpp_gemv_Q8-0-M1-down-proj_sm-86_20260902T225915.json) |
 | max | Q4_0_M1_down_proj | M1 4096x14336 | 43.53 | 43.19 | 760 | 81.2 | 93.1 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M1-down-proj_sm-86_20260902T024927.json) |
 | max | bf16_M1_down_proj | M1 4096x14336 | 134.04 | 133.36 | 876 | 93.6 | 107.4 | 1.6e-03 | yes | [json](bench/results/max_gemv_bf16-M1-down-proj_sm-86_20260902T025249.json) |
 | max | fp16_M1_down_proj | M1 4096x14336 | 134.01 | 133.23 | 877 | 93.7 | 107.4 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-down-proj_sm-86_20260902T025241.json) |
 | ours | Q4_0_M1_down_proj | M1 4096x14336 | 40.45 | 39.59 | 817 | 87.3 | 100.1 | 5.5e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-down-proj_sm-86_20260902T223720.json) |
 | llamacpp | Q4_0_M1_qkv_fused | M1 6144x4096 | 19.57 | 19.38 | 724 | 77.4 | 88.8 | 1.2e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-qkv-fused_sm-86_20260902T024921.json) |
+| llamacpp | Q4_K_M1_qkv_fused | M1 6144x4096 | 20.22 | 19.96 | 701 | 74.9 | 85.9 | 5.5e-03 | yes | [json](bench/results/llamacpp_gemv_Q4-K-M1-qkv-fused_sm-86_20260902T230137.json) |
+| llamacpp | Q8_0_M1_qkv_fused | M1 6144x4096 | 33.63 | 33.18 | 796 | 85.0 | 97.5 | 5.5e-03 | yes | [json](bench/results/llamacpp_gemv_Q8-0-M1-qkv-fused_sm-86_20260902T225907.json) |
 | max | Q4_0_M1_qkv_fused | M1 6144x4096 | compile-fail | — | — | — | — | — | — | [json](bench/results/max_gemv_Q4-0-M1-qkv-fused_sm-86_20260902T224804.json) |
 | max | bf16_M1_qkv_fused | M1 6144x4096 | 57.55 | 57.34 | 875 | 93.5 | 107.2 | 1.6e-03 | yes | [json](bench/results/max_gemv_bf16-M1-qkv-fused_sm-86_20260902T025233.json) |
 | max | fp16_M1_qkv_fused | M1 6144x4096 | 57.53 | 57.34 | 875 | 93.5 | 107.2 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-qkv-fused_sm-86_20260902T025225.json) |
 | ours | Q4_0_M1_qkv_fused | M1 6144x4096 | 19.29 | 18.95 | 735 | 78.5 | 90.0 | 5.5e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-qkv-fused_sm-86_20260902T223738.json) |
 | llamacpp | Q4_0_M1_up_proj | M1 14336x4096 | 41.76 | 41.66 | 792 | 84.6 | 97.0 | 1.3e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-up-proj_sm-86_20260902T024949.json) |
+| llamacpp | Q4_K_M1_up_proj | M1 14336x4096 | 37.49 | 37.28 | 882 | 94.2 | 108.1 | 5.4e-03 | yes | [json](bench/results/llamacpp_gemv_Q4-K-M1-up-proj_sm-86_20260902T230145.json) |
+| llamacpp | Q8_0_M1_up_proj | M1 14336x4096 | 66.79 | 66.65 | 935 | 99.9 | 114.5 | 5.4e-03 | yes | [json](bench/results/llamacpp_gemv_Q8-0-M1-up-proj_sm-86_20260902T225911.json) |
 | max | Q4_0_M1_up_proj | M1 14336x4096 | 51.62 | 51.15 | 641 | 68.4 | 78.5 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M1-up-proj_sm-86_20260902T024940.json) |
 | max | bf16_M1_up_proj | M1 14336x4096 | 130.80 | 130.48 | 898 | 96.0 | 110.0 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M1-up-proj_sm-86_20260902T025306.json) |
 | max | fp16_M1_up_proj | M1 14336x4096 | 130.80 | 130.58 | 898 | 96.0 | 110.0 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-up-proj_sm-86_20260902T025257.json) |
 | ours | Q4_0_M1_up_proj | M1 14336x4096 | 40.62 | 39.80 | 814 | 87.0 | 99.7 | 5.4e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-up-proj_sm-86_20260902T223716.json) |
 | llamacpp | Q4_0_M1_gate_up | M1 28672x4096 | 75.53 | 75.41 | 875 | 93.5 | 107.2 | 1.3e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-gate-up_sm-86_20260902T025002.json) |
+| llamacpp | Q4_K_M1_gate_up | M1 28672x4096 | 77.51 | 77.28 | 853 | 91.2 | 104.5 | 5.5e-03 | yes | [json](bench/results/llamacpp_gemv_Q4-K-M1-gate-up_sm-86_20260902T230207.json) |
+| llamacpp | Q8_0_M1_gate_up | M1 28672x4096 | 129.74 | 129.59 | 962 | 102.8 | 117.9 | 5.5e-03 | yes | [json](bench/results/llamacpp_gemv_Q8-0-M1-gate-up_sm-86_20260902T225920.json) |
 | max | Q4_0_M1_gate_up | M1 28672x4096 | 473.78 | 472.55 | 140 | 14.9 | 17.1 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M1-gate-up_sm-86_20260902T024955.json) |
 | max | bf16_M1_gate_up | M1 28672x4096 | 258.99 | 258.65 | 907 | 96.9 | 111.1 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M1-gate-up_sm-86_20260902T025323.json) |
 | max | fp16_M1_gate_up | M1 28672x4096 | 259.00 | 258.72 | 907 | 96.9 | 111.1 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-gate-up_sm-86_20260902T025314.json) |
 | ours | Q4_0_M1_gate_up | M1 28672x4096 | 74.93 | 74.19 | 883 | 94.3 | 108.1 | 5.5e-03 | yes | [json](bench/results/ours_gemv_Q4-0-M1-gate-up_sm-86_20260902T223814.json) |
 | llamacpp | Q4_0_M1_lm_head | M1 128256x4096 | 330.61 | 330.33 | 895 | 95.6 | 109.6 | 1.3e-02 | yes | [json](bench/results/llamacpp_gemv_Q4-0-M1-lm-head_sm-86_20260902T025016.json) |
+| llamacpp | Q4_K_M1_lm_head | M1 128256x4096 | 303.30 | 303.10 | 975 | 104.2 | 119.5 | 5.4e-03 | yes | [json](bench/results/llamacpp_gemv_Q4-K-M1-lm-head_sm-86_20260902T230248.json) |
+| llamacpp | Q8_0_M1_lm_head | M1 128256x4096 | 620.31 | 618.04 | 900 | 96.2 | 110.3 | 5.4e-03 | yes | [json](bench/results/llamacpp_gemv_Q8-0-M1-lm-head_sm-86_20260902T225936.json) |
 | max | Q4_0_M1_lm_head | M1 128256x4096 | 2030.90 | 2028.96 | 146 | 15.6 | 17.8 | 3.8e-03 | yes | [json](bench/results/max_gemv_Q4-0-M1-lm-head_sm-86_20260902T025008.json) |
 | max | bf16_M1_lm_head | M1 128256x4096 | 1150.49 | 1149.65 | 913 | 97.6 | 111.9 | 1.7e-03 | yes | [json](bench/results/max_gemv_bf16-M1-lm-head_sm-86_20260902T025344.json) |
 | max | fp16_M1_lm_head | M1 128256x4096 | 1150.52 | 1149.77 | 913 | 97.6 | 111.9 | 2.1e-04 | yes | [json](bench/results/max_gemv_fp16-M1-lm-head_sm-86_20260902T025332.json) |
@@ -157,6 +169,19 @@ results JSON.
   up_proj (87 vs 68) and down_proj (87 vs 81), and it runs o_proj/qkv where MAX
   compile-fails. Medians of 3 passes, ±0.3 % under a quiet GPU (a busy desktop
   widens it to ±3–5 %). See the H1 section.
+- **llama.cpp Q8_0 and Q4_K GEMV: bandwidth-saturated, no MAX GPU counterpart.**
+  Same `mul_mat_vec_q` (+`quantize_q8_1`) family, nsys-verified (kernel template
+  arg 8 = Q8_0, 12 = Q4_K). **Q8_0** (1.0625 B/weight): 80–103 % of spec,
+  ≥99 % on the four mid/large shapes — it is DRAM-bound and llama.cpp reaches it.
+  **Q4_K** (0.5625 B/weight, K-quant superblocks): 74–104 %, same shape trend as
+  Q4_0. MAX has **no GPU matmul for either** (Q8_0/Q4_K are CPU-only upstream, see
+  audit) — so these rows are a llama.cpp-only baseline; the `max` column is N/A by
+  absence, not a measured failure. The Q4_K weights are quantized with ggml's own
+  quantizer (`quantize_weight`, since gguf-py implements dequant but not quant for
+  K-quants) and validated against the Python dequant (L2 ~5e-3). A few large-N
+  rows read slightly **above the 936 GB/s nominal spec** (up to ~104 %): the shape
+  is pure weight streaming and the GDDR6X sustains marginally over the nominal
+  figure — `% spec` is normalized to that nominal, not capped at it.
 - **Attention decode: bandwidth-bound-optimal at long context.** seq 16384 hits
   86.5 % of spec (99 % of measured roofline); seq 4096 is 60 %; seq 1024 is 24 %.
   The short-context numbers are latency-bound, not a kernel deficiency — at seq

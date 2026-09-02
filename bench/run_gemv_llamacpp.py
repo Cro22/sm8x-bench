@@ -37,7 +37,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--shape", default="o_proj")
     ap.add_argument("--M", type=int, default=1)
-    ap.add_argument("--fmt", default="Q4_0", choices=["Q4_0"])
+    ap.add_argument("--fmt", default="Q4_0", choices=["Q4_0", "Q8_0", "Q4_K"])
     ap.add_argument("--locked-clock", type=int, default=None)
     ap.add_argument("--measured-gbps", type=float, default=None)
     ap.add_argument("--gpu-index", type=int, default=0)
@@ -62,8 +62,8 @@ def main() -> int:
     # Passed via env= (not an `env` cmd prefix, which nsys profiles instead of
     # following into the driver).
     cmd = [str(DRIVER), str(N), str(K), str(M),
-           str(p["W"]), str(p["x"]), str(p["ref"])]
-    print(f"profiling under nsys: llama.cpp {args.shape} Q4_0 M{M} ...")
+           str(p["W"]), str(p["x"]), str(p["ref"]), args.fmt]
+    print(f"profiling under nsys: llama.cpp {args.shape} {args.fmt} M{M} ...")
     rows = nsys.kernel_summary(cmd, cwd=_REPO,
                                env={"GGML_CUDA_DISABLE_GRAPHS": "1"})
     meta = rows[0]
@@ -90,12 +90,12 @@ def main() -> int:
             wall_median = round(st.median(s), 3)
 
     median_us = kt["med_us"]
-    bytes_moved = roofline.gemv_bytes(M, N, K, "Q4_0")
+    bytes_moved = roofline.gemv_bytes(M, N, K, args.fmt)
     flops = roofline.gemv_flops(M, N, K)
     kernel_names = ", ".join(k["name"] for k in kt["kernels"])
 
-    note = (f"llama.cpp Q4_0; nsys kernel(s): {kernel_names}. "
-            f"f32 activations (MAX used bf16); identical Q4_0 weight bytes. ")
+    note = (f"llama.cpp {args.fmt}; nsys kernel(s): {kernel_names}. "
+            f"f32 activations; identical {args.fmt} weight bytes. ")
     if kt["warning"]:
         note += "WARN " + kt["warning"] + ". "
     if wall_median is not None:
@@ -104,9 +104,9 @@ def main() -> int:
     path = write_result(
         impl="llamacpp",
         kernel="gemv",
-        variant=f"Q4_0_M{M}_{args.shape}",
+        variant=f"{args.fmt}_M{M}_{args.shape}",
         shape={"M": M, "N": N, "K": K},
-        dtype={"weights": "Q4_0", "activations": "fp32", "accum": "fp32"},
+        dtype={"weights": args.fmt, "activations": "fp32", "accum": "fp32"},
         bytes_moved=bytes_moved,
         flops=flops,
         timing={

@@ -170,9 +170,10 @@ uv run python -m bench.report                                        # regenerat
 - **H0 (audit + benchmark upstream MAX):** the audit and the RTX 3090
   measurements are done. Dense + attention are at the roofline. Q4_0 is uneven
   (see the table): MAX has a good decode config for some shapes, a datacenter
-  GEMM (15 %) for others, and a g32 compile failure for two. Secondary baselines
-  (Q8_0/Q4_K, FlashInfer, cuBLAS) are not done yet — so "best CUDA baselines" so
-  far means llama.cpp Q4_0 only.
+  GEMM (15 %) for others, and a g32 compile failure for two. llama.cpp GEMV
+  baselines cover **Q4_0, Q8_0 and Q4_K** (Q8_0/Q4_K are bandwidth-saturated and
+  have no MAX GPU counterpart — CPU-only upstream). Remaining baselines
+  (llama.cpp flash-attn, FlashInfer decode, cuBLAS fp16 GEMV) are not done yet.
 - **H1 (write the gap kernel):** our Q4_0 GEMV is 71–99 % of roofline on all six
   shapes — beating llama.cpp on four (qkv/up_proj/gate_up/lm_head), tying o_proj,
   within 1.8 % on down_proj — and faster than MAX on all six, including the two

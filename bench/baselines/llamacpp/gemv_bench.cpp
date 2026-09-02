@@ -1,15 +1,16 @@
-// llama.cpp/ggml Q4_0 GEMV baseline benchmark.
+// llama.cpp/ggml quantized GEMV baseline benchmark (Q4_0 / Q8_0 / Q4_K).
 //
-// Times ggml_mul_mat with a Q4_0 weight and an F32 activation at our canonical
-// decode shapes, reading the SAME Q4_0 weight bytes MAX consumed, validating
-// against our fp32 reference, and printing timing in the format bench/mojo/
-// gemv_max.mojo emits so the Python runner parses both identically.
+// Times ggml_mul_mat with a quantized weight and an F32 activation at our
+// canonical decode shapes, reading the SAME weight bytes our reference used,
+// validating against our fp32 reference, and printing timing in the format
+// bench/mojo/gemv_max.mojo emits so the Python runner parses both identically.
 //
-// ggml_mul_mat(a, b): a = weight [ne0=K, ne1=N] (Q4_0), b = [ne0=K, ne1=M]
-// (F32), result = [ne0=N, ne1=M]. Our raw W bytes are row-major N x (K/32*18),
-// which is exactly a ggml Q4_0 tensor of ne0=K, ne1=N -> single memcpy.
+// ggml_mul_mat(a, b): a = weight [ne0=K, ne1=N] (quantized), b = [ne0=K, ne1=M]
+// (F32), result = [ne0=N, ne1=M]. Our raw W bytes are row-major GGUF blocks
+// (N x K in the format's block layout), which is exactly a ggml tensor of
+// ne0=K, ne1=N -> single memcpy.
 //
-// argv: N K M W_path x_path ref_path
+// argv: N K M W_path x_path ref_path [fmt]   (fmt in {Q4_0,Q8_0,Q4_K}, default Q4_0)
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -42,8 +43,8 @@ static inline float bf16_to_f32(uint16_t b) {
 }
 
 int main(int argc, char ** argv) {
-    if (argc != 7) {
-        fprintf(stderr, "usage: %s N K M W_path x_path ref_path\n", argv[0]);
+    if (argc != 7 && argc != 8) {
+        fprintf(stderr, "usage: %s N K M W_path x_path ref_path [fmt]\n", argv[0]);
         return 1;
     }
     const int64_t N = atoll(argv[1]);
@@ -52,12 +53,22 @@ int main(int argc, char ** argv) {
     const char * W_path   = argv[4];
     const char * x_path   = argv[5];
     const char * ref_path = argv[6];
+    const char * fmt      = (argc == 8) ? argv[7] : "Q4_0";
+
+    // Resolve GGUF weight format -> ggml type + block layout (weights per block,
+    // bytes per block) so the W file-size check and the tensor type are correct.
+    ggml_type wtype; int64_t blk, bpb;
+    if      (!strcmp(fmt, "Q4_0")) { wtype = GGML_TYPE_Q4_0; blk = 32;  bpb = 18;  }
+    else if (!strcmp(fmt, "Q8_0")) { wtype = GGML_TYPE_Q8_0; blk = 32;  bpb = 34;  }
+    else if (!strcmp(fmt, "Q4_K")) { wtype = GGML_TYPE_Q4_K; blk = 256; bpb = 144; }
+    else { fprintf(stderr, "unsupported fmt %s (Q4_0|Q8_0|Q4_K)\n", fmt); return 1; }
 
     // ---- Load inputs. ----
     std::vector<uint8_t> W_bytes = read_bytes(W_path);
-    const size_t expect_W = (size_t)N * (K / 32) * 18;
+    const size_t expect_W = (size_t)N * (K / blk) * bpb;
     if (W_bytes.size() != expect_W) {
-        fprintf(stderr, "W size %zu != expected %zu (N*K/32*18)\n", W_bytes.size(), expect_W);
+        fprintf(stderr, "W size %zu != expected %zu (N*K/%lld*%lld for %s)\n",
+                W_bytes.size(), expect_W, (long long)blk, (long long)bpb, fmt);
         return 1;
     }
     std::vector<uint8_t> x_raw = read_bytes(x_path); // bf16 [M,K]
@@ -87,7 +98,7 @@ int main(int argc, char ** argv) {
     };
     ggml_context * ctx = ggml_init(params);
 
-    ggml_tensor * W = ggml_new_tensor_2d(ctx, GGML_TYPE_Q4_0, K, N); // [ne0=K, ne1=N]
+    ggml_tensor * W = ggml_new_tensor_2d(ctx, wtype, K, N); // [ne0=K, ne1=N]
     ggml_tensor * x_t = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, K, M); // [ne0=K, ne1=M]
     ggml_set_name(W, "W");
     ggml_set_name(x_t, "x");

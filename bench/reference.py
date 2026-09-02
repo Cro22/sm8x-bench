@@ -69,6 +69,30 @@ def _save(path: Path, arr: np.ndarray, meta: dict) -> None:
     path.with_suffix(".json").write_text(json.dumps(meta, indent=2))
 
 
+_QUANTIZER = (Path(__file__).resolve().parent / "baselines" / "llamacpp"
+              / "quantize_weight")
+
+
+def _ggml_quantize(W_src: np.ndarray, fmt: str, N: int, K: int) -> np.ndarray:
+    """Quantize an fp32 [N,K] weight to GGUF `fmt` bytes via ggml's own quantizer
+    (for K-quants gguf-py cannot produce). Returns a flat uint8 array."""
+    import subprocess
+    import tempfile
+
+    if not _QUANTIZER.exists():
+        raise FileNotFoundError(
+            f"{_QUANTIZER} not built; run bench/baselines/llamacpp/build_gemv_bench.sh")
+    with tempfile.TemporaryDirectory() as d:
+        fin = Path(d) / "w.f32"
+        fout = Path(d) / "w.q"
+        W_src.astype("<f4").tofile(fin)
+        r = subprocess.run([str(_QUANTIZER), fmt, str(N), str(K), str(fin), str(fout)],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            raise RuntimeError(f"quantize_weight failed: {r.stderr or r.stdout}")
+        return np.fromfile(fout, dtype=np.uint8)
+
+
 def gen_gemv(name: str, N: int, K: int, fmt: str, M: int = 1) -> None:
     """Write W (N x K, `fmt`), x (M x K, activation dtype for `fmt`), and the
     fp32 reference y (M x N). The reference is computed from the EXACT bytes the
@@ -96,27 +120,41 @@ def gen_gemv(name: str, N: int, K: int, fmt: str, M: int = 1) -> None:
         W_f32 = W.astype(np.float32)  # exact dequant of the stored low-precision W
         _save(p["W"], W,
               {"tensor": "W", "shape": [N, K], "dtype": fmt, "format": fmt})
-    elif fmt == "Q4_0":
-        # Quantize a random fp32 weight to GGUF Q4_0 (exact ggml layout), store
-        # the raw block bytes, and use the DEQUANTIZED weight as the reference
-        # basis (that is what the fused-dequant kernel effectively multiplies).
-        # 18 B / 32-weight block; MAX repacks these internally (repack_Q4_0).
+    elif fmt in ("Q4_0", "Q8_0", "Q4_K"):
+        # Quantize a random fp32 weight to a GGUF block format (exact ggml layout),
+        # store the raw block bytes, and use the DEQUANTIZED weight as the
+        # reference basis (that is what a fused-dequant kernel effectively
+        # multiplies). Q4_0/Q8_0 have a 32-weight block; Q4_K a 256-weight
+        # superblock. MAX runs Q4_0 on GPU (repack_Q4_0); Q8_0/Q4_K are here only
+        # for the llama.cpp baseline (MAX has no GPU matmul for them — CPU-only
+        # upstream, see reports/audit.md).
         from gguf.quants import quantize, dequantize
         from gguf.constants import GGMLQuantizationType as GT
 
-        assert K % 32 == 0, "Q4_0 needs K % 32 == 0"
+        # (ggml type, block weights, bytes per block).
+        _QSPEC = {
+            "Q4_0": (GT.Q4_0, 32, 18),
+            "Q8_0": (GT.Q8_0, 32, 34),   # 2 B fp16 scale + 32 int8
+            "Q4_K": (GT.Q4_K, 256, 144), # K-quant superblock
+        }
+        gt, blk, bpb = _QSPEC[fmt]
+        assert K % blk == 0, f"{fmt} needs K % {blk} == 0"
         W_src = wr.standard_normal((N, K)).astype(np.float32)
-        qbytes = quantize(W_src, GT.Q4_0)              # (N, K//32*18) uint8
-        W_f32 = dequantize(qbytes, GT.Q4_0).astype(np.float32)
+        # gguf-py implements quantize for Q4_0/Q8_0 but NOT the K-quants; it can
+        # still dequantize them. For Q4_K we quantize with ggml's own quantizer
+        # (bench/baselines/llamacpp/quantize_weight) and dequantize in Python.
+        if fmt == "Q4_K":
+            qbytes = _ggml_quantize(W_src, fmt, N, K).reshape(N, (K // blk) * bpb)
+        else:
+            qbytes = quantize(W_src, gt)               # (N, K//blk*bpb) uint8
+        W_f32 = dequantize(qbytes, gt).astype(np.float32)
         _save(p["W"], qbytes,
-              {"tensor": "W", "shape": [N, K], "dtype": "uint8", "format": "Q4_0",
-               "block": 32, "bytes_per_block": 18,
+              {"tensor": "W", "shape": [N, K], "dtype": "uint8", "format": fmt,
+               "block": blk, "bytes_per_block": bpb,
                "raw_shape": list(qbytes.shape),
-               "note": "raw GGUF Q4_0 blocks; MAX repacks internally"})
+               "note": f"raw GGUF {fmt} blocks"})
     else:
-        raise NotImplementedError(
-            f"format {fmt!r} not implemented on GPU by MAX (Q8_0/Q4_K are "
-            f"CPU-only upstream; see reports/audit.md)")
+        raise NotImplementedError(f"format {fmt!r} not implemented")
 
     ref = (x_f32 @ W_f32.T).astype(np.float32)  # (M, N)
     _save(p["ref"], ref,
