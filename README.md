@@ -24,27 +24,29 @@ shapes, close to llama.cpp.
 - **Dense GEMV (fp16/bf16)** — 87–98 % of the memory-bandwidth roofline at M=1;
   no gap to close (and it beats cuBLAS at M=1, which falls to a GEMM tile).
   ([details](reports/h0-results.md))
-- **Attention decode** (flash-decoding over paged KV) — at the roofline at long
-  context (**91.0 % at 16k, a hair ahead of FlashInfer**) with a narrow mid-context
-  gap: at seq 4096 MAX is 63.7 % vs FlashInfer's 70.2 % on the same paged KV
-  (~6–7 pts, same-session 3 passes each, non-overlapping). A tuning gap at seq~4k,
-  not "nothing to improve" — details in [reports/h0-results.md](reports/h0-results.md).
+- **Attention decode** (flash-decoding over paged KV) — at the roofline and **ahead
+  of FlashInfer at long context** (16k: MAX 96.0 % vs FlashInfer-paged 86.3 %; MAX
+  ahead in both measured rounds) with a **modest mid-context gap**: at seq 4096 MAX
+  66.5 % vs FlashInfer 70.0 % on the same paged KV (~3–7 pts across rounds).
+  Attention has large ±5–10 % run-to-run variance; the 3 pass medians are preserved
+  in each JSON. A tuning gap at seq~4k, not "nothing to improve" —
+  [details](reports/h0-results.md).
 - **Q4_0 (4-bit) matmul, MAX's real dispatch** — uneven: it **has a decode-tuned
   config** for up_proj/down_proj (69–81 % of roofline), **falls to a datacenter
   GEMM tile** for gate_up/lm_head (15 %), and **fails to compile** for
   GGUF Q4_0 (group_size 32) on o_proj/qkv. MAX has no single decode-quant kernel
   that works well everywhere.
 - **Our Q4_0 GEMV** ([`kernels/q4_0_gemv.mojo`](kernels/q4_0_gemv.mojo)) —
-  **74–102 % of roofline on every shape, at parity with llama.cpp, and faster than
-  MAX on all six.** After tuning (multiple output rows per warp for memory-level
-  parallelism + a per-shape launch config) it **matches** llama.cpp Q4_0 —
-  measured same-session, 3 passes each: five of six shapes are ties within the
-  0–9 % run-to-run noise (the locked graphics clock doesn't lock the GDDR6X memory
-  clock and the shared desktop steals bandwidth), and llama.cpp is faster on
-  gate_up. No shape is a robust win for ours. The **real** win is vs MAX: ~6×
-  faster on gate_up/lm_head, ahead on up_proj/down_proj, and it runs the two shapes
-  MAX compile-fails. A single kernel, uniformly near-roofline, where MAX is absent,
-  15 %, or (at best) 81 %.
+  **74–102 % of roofline on every shape, at parity with llama.cpp.** After tuning
+  (multiple output rows per warp for memory-level parallelism + a per-shape launch
+  config) it **matches** llama.cpp Q4_0 — measured same-session, 3 passes each:
+  five of six shapes are ties within the 0–9 % run-to-run noise (the locked
+  graphics clock doesn't lock the GDDR6X memory clock and the shared desktop steals
+  bandwidth), and llama.cpp is faster on gate_up. No shape is a robust win for ours.
+  The **real** win is vs MAX: on the **four shapes MAX can run** ours is faster (~6×
+  on gate_up/lm_head, ahead on up_proj/down_proj); on the **two it compile-fails**
+  (o_proj/qkv) ours simply runs them (no MAX speed to beat there). A single kernel,
+  uniformly near-roofline, where MAX is absent, 15 %, or (at best) 81 %.
 
 ### Q4_0 decode GEMV, three implementations, same weights, same measurement
 
@@ -60,7 +62,7 @@ rounded copy of the JSON-generated tables in
 |---|---|---|---|
 | o_proj 4096×4096       | compile-fail (g32) | **13.7 µs / 73.8 / 74.5** | 13.9 µs / 72.6 / 72.7 |
 | qkv 6144×4096          | compile-fail (g32) | **19.6 µs / 77.4 / 82.5** | 18.1 µs / 83.7 / 83.8 |
-| down_proj 4096×14336   | 43.5 µs / 81.2 %   | **38.4 µs / 92.0 / 92.0** | 38.0 µs / 92.9 / 94.7 |
+| down_proj 4096×14336   | 43.5 µs / 81.2 %   | **38.4 µs / 92.0 / 92.0** | 38.0 µs / 92.9 / 94.8 |
 | up_proj 14336×4096     | 51.6 µs / 68.4 %   | **41.7 µs / 84.8 / 88.1** | 39.9 µs / 88.5 / 88.5 |
 | gate_up 28672×4096     | 474 µs / 14.9 %    | **77.0 µs / 91.7 / 91.8** | 70.6 µs / 100.1 / 100.1 |
 | lm_head 128256×4096    | 2031 µs / 15.6 %   | **312 µs / 101.2 / 101.9** | 311 µs / 101.5 / 101.5 |
@@ -145,8 +147,11 @@ scripts/            gpu-lock.sh, sweep_gemv.sh
 
 ## Methodology (why the numbers are trustworthy)
 
-- **Locked clocks.** Graphics clock locked to 1695 MHz (3090) for every run;
-  memory clock isn't lockable on GeForce. See `scripts/gpu-lock.sh`.
+- **Locked clocks.** Graphics clock locked to 1695 MHz (3090) for every run and
+  **sampled under load and recorded in each GEMV/attention JSON** (all 1695); the
+  **bandwidth-probe** JSON is the exception — it records only the CLI-passed clock.
+  Memory clock isn't lockable on GeForce, so bandwidth-bound kernels still have a
+  0–9 % run-to-run band. See `scripts/gpu-lock.sh`.
 - **Authoritative timing is nsys per-kernel duration**, not wall-clock — it
   excludes host-side dispatch overhead (amortized in production) and is robust to
   the desktop sharing the GPU. Cross-checked that the harness agrees where the
@@ -215,14 +220,16 @@ uv run python -m bench.report                                        # regenerat
   smallest shapes, sm_89 (no 4090 on the bench box), the last baseline (llama.cpp
   flash-attn), raw `.nsys-rep` artifacts, and preparing the upstream contribution.
 
-This record was corrected after **two** adversarial reviews. The first found MAX
+This record was corrected across **three** adversarial reviews. The first found MAX
 had been measured through a forced fallback config (not its real dispatcher) with
-unproven clocks. The second found the report still oversold rigor — so **"beats
+unproven clocks. The second found the report oversold rigor — so **"beats
 llama.cpp on four of six" is retracted** (same-session 3-pass measurement shows
-parity), input hashes and all 3 pass medians are now stored in each JSON,
+parity), input hashes and 3 pass medians are stored in the Q4_0 JSONs,
 "compute-bound" is relabeled an inferred diagnosis, and the memory clock (which
 these bandwidth-bound kernels actually depend on) is documented as unlockable and
-uncontrolled. See reports/h0-results.md "Corrections".
+uncontrolled. The third tightened residual claims — the attention 3-pass envelope
+is now stored in its JSONs too (not just written in prose), and single-run/rounding/
+byte-count limitations are declared. See reports/h0-results.md "Corrections".
 
 All results are from the RTX 3090; the RTX 4090 (sm_89) is not present on the
 current bench box, so those rows are `N/A` for now.

@@ -113,17 +113,19 @@ gap that MAX leaves on the table at mid context. This revises the earlier
 **RESOLVED (2026-09-03) — confound removed, measured same-session 3× each.** MAX
 and FlashInfer paged (`BatchDecodeWithPagedKVCacheWrapper`, page 128), 3 passes:
 
-| seq | MAX (range) | FlashInfer paged (range) |
-|---|---|---|
-| 1024 | 25.6 | 39.2 |
-| 4096 | 63.7 (60.0–63.8) | 70.2 (69.7–73.7) |
-| 16384 | 91.0 (90.9–91.0) | 89.9 (89.5–90.0) |
+3 passes each, both preserved in `timing.passes` (committed run median, range):
 
-At seq 4096 the distributions do not overlap (MAX max 63.8 < FlashInfer min 69.7)
-→ a **real ~6–7-pt MAX `mha_decoding` mid-context inefficiency**. At seq 16384 MAX
-is a hair *ahead* (91.0 vs 89.9 — the earlier confounded "MAX 86.7" was a slow
-single run). At seq 1024 both latency-bound. The raw contiguous-FlashInfer 79.3 %
-was ~9 pts of paging confound.
+| seq | MAX | FlashInfer paged |
+|---|---|---|
+| 1024 | 26.9 | 39.4 |
+| 4096 | 66.5 (66.5–66.6) | 70.1 (67.6–72.9) |
+| 16384 | **96.0 (95.8–96.0)** | 86.3 (85.1–89.1) |
+
+Attention has large ±5–10 % run-to-run variance (a prior same-session round gave
+MAX 63.7 / 91.0 and FlashInfer 70.2 / 89.9 at seq 4096 / 16384), so read the
+*direction*, stable across both rounds: **FlashInfer modestly ahead at seq 4096
+(~3–7 pts)**, **MAX ahead at seq 16384**, FlashInfer ahead at seq 1024 (latency).
+The raw contiguous-FlashInfer 79.3 % at seq 4096 was ~9 pts of paging confound.
 
 **Forum-worthy question (narrowed):** on consumer Ampere (82 SMs), MAX
 `mha_decoding` is ~6–7 points below FlashInfer at seq 4096 on the identical paged KV

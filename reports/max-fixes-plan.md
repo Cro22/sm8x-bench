@@ -182,18 +182,18 @@ roofline at long context (86.7 % at seq 16384) but 61.7 % at seq 4096. The first
 comparison (FlashInfer *contiguous* 79.3 %) was confounded by MAX's *paged* KV.
 Running FlashInfer **paged** (page 128) at the same shapes splits the 18-pt gap:
 
-Same-session, 3 passes each (median, with range):
+Same-session, 3 passes each, all preserved in `timing.passes` (committed run):
 
-| seq | MAX | FlashInfer paged | FlashInfer contiguous |
-|---|---|---|---|
-| 1024 | 25.6 | 39.2 | 27.0 |
-| 4096 | **63.7 (60.0–63.8)** | **70.2 (69.7–73.7)** | 79.3 |
-| 16384 | **91.0 (90.9–91.0)** | 89.9 | 89.7 |
+| seq | MAX | FlashInfer paged |
+|---|---|---|
+| 1024 | 26.9 | 39.4 |
+| 4096 | 66.5 | 70.1 |
+| 16384 | **96.0** | 86.3 |
 
-At seq 4096 the two distributions do not overlap → a **real ~6–7-pt MAX
-mid-context inefficiency**; at seq 16384 MAX is actually a hair *ahead* (91.0 vs
-89.9); at seq 1024 both are latency-bound. Much of the raw 18-pt gap was the
-paged-vs-contiguous confound (contiguous FlashInfer 79.3 %).
+Attention has large ±5–10 % variance; direction is stable across two rounds:
+**FlashInfer modestly ahead at seq 4096 (~3–7 pts)**, **MAX ahead at seq 16384**.
+Much of the raw 18-pt "gap" was the paged-vs-contiguous confound (contiguous
+FlashInfer 79.3 % at seq 4096).
 
 **No bug PR.** This is a *tuning* gap, not a correctness bug — appropriate as a
 forum question (is the seq~4k split-K partitioning / occupancy tuned for 82-SM

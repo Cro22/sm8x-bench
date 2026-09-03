@@ -12,10 +12,11 @@ review (see "Corrections" below).
 
 On the RTX 3090 (sm_86), MAX's dense decode GEMV is at the memory-bandwidth limit
 (fp16/bf16 M=1 at **90–97 % of spec** across all projection shapes) and its
-attention decode is at the limit at long context (**91.0 % of spec at 16k**, a hair
-ahead of FlashInfer) with a narrow **mid-context gap**: at seq 4096 MAX is 63.7 %
-vs FlashInfer's **70.2 % on the same paged KV** (~6–7 points, same-session 3 passes
-each, non-overlapping distributions; see caveats). Its
+attention decode is at the limit and **ahead of FlashInfer at long context** (16k:
+MAX 96.0 % vs FlashInfer-paged 86.3 %; MAX ≥ FlashInfer in both measured rounds),
+with a **modest mid-context gap**: at seq 4096 MAX 66.5 % vs FlashInfer 70.0 % on
+the same paged KV (~3–7 pts across rounds — attention has large ±5–10 % run-to-run
+variance; the 3 pass medians are in each JSON's `timing.passes`; see caveats). Its
 **Q4_0 (4-bit)** path, measured through its real dispatcher, is **uneven**: a
 decode-tuned config gives **69–81 %** on up_proj/down_proj, but shapes that fall
 to the default 128×128 GEMM tile (gate_up/lm_head) run at **~15 %**, and
@@ -28,7 +29,7 @@ on all six shapes and is at **parity with llama.cpp Q4_0** — *not* faster. Mea
 locked graphics clock does not lock the GDDR6X memory clock and the shared desktop
 steals bandwidth → 0–9 % run-to-run spread): five of six shapes are **ties within
 that noise** (o_proj 74.5 vs 72.7, qkv 82.5 vs 83.8, up_proj 88.1 vs 88.4,
-down_proj 92.0 vs 94.7, lm_head 101.9 vs 101.5), and llama.cpp is **clearly faster
+down_proj 92.0 vs 94.8, lm_head 101.9 vs 101.5), and llama.cpp is **clearly faster
 on gate_up (100.1 vs 91.8)**. No shape shows a robust win for ours. (The earlier
 "beats llama.cpp on four of six" was an artifact of comparing a quiet-GPU *ours*
 run against a different-day *llama* run; fair same-session measurement erases every
@@ -146,14 +147,14 @@ results JSON.
 | Impl | Variant | Shape | Median µs | min µs | GB/s | % spec | % meas | L2 err | Validated | JSON |
 |---|---|---|---|---|---|---|---|---|---|---|
 | flashinfer | fp16_gqa32x8_hd128_seq1024 | seq1024 gqa32x8 hd128 | 16.61 | 16.52 | 252 | 27.0 | 30.9 | 3.0e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq1024_sm-86_20260902T234151.json) |
-| flashinfer | fp16_gqa32x8_hd128_seq1024_paged | seq1024 gqa32x8 hd128 | 11.44 | 11.41 | 367 | 39.2 | 44.9 | 2.9e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq1024-paged_sm-86_20260903T014742.json) |
-| max | fp16_gqa32x8_hd128_seq1024 | seq1024 gqa32x8 hd128 | 17.52 | 17.25 | 239 | 25.6 | 29.3 | 4.5e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq1024_sm-86_20260903T014726.json) |
+| flashinfer | fp16_gqa32x8_hd128_seq1024_paged | seq1024 gqa32x8 hd128 | 11.38 | 11.32 | 368 | 39.4 | 45.1 | 2.9e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq1024-paged_sm-86_20260903T020311.json) |
+| max | fp16_gqa32x8_hd128_seq1024 | seq1024 gqa32x8 hd128 | 16.68 | 16.39 | 252 | 26.9 | 30.8 | 4.5e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq1024_sm-86_20260903T020252.json) |
 | flashinfer | fp16_gqa32x8_hd128_seq4096 | seq4096 gqa32x8 hd128 | 22.59 | 22.30 | 743 | 79.3 | 91.0 | 3.6e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq4096_sm-86_20260902T234207.json) |
-| flashinfer | fp16_gqa32x8_hd128_seq4096_paged | seq4096 gqa32x8 hd128 | 25.55 | 25.16 | 657 | 70.2 | 80.4 | 3.5e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq4096-paged_sm-86_20260903T014610.json) |
-| max | fp16_gqa32x8_hd128_seq4096 | seq4096 gqa32x8 hd128 | 28.16 | 27.38 | 596 | 63.7 | 73.0 | 3.8e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq4096_sm-86_20260903T014554.json) |
+| flashinfer | fp16_gqa32x8_hd128_seq4096_paged | seq4096 gqa32x8 hd128 | 25.58 | 25.13 | 656 | 70.1 | 80.3 | 3.5e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq4096-paged_sm-86_20260903T020210.json) |
+| max | fp16_gqa32x8_hd128_seq4096 | seq4096 gqa32x8 hd128 | 26.96 | 25.69 | 622 | 66.5 | 76.2 | 3.8e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq4096_sm-86_20260903T020150.json) |
 | flashinfer | fp16_gqa32x8_hd128_seq16384 | seq16384 gqa32x8 hd128 | 79.96 | 79.20 | 839 | 89.7 | 102.8 | 3.5e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq16384_sm-86_20260902T234214.json) |
-| flashinfer | fp16_gqa32x8_hd128_seq16384_paged | seq16384 gqa32x8 hd128 | 79.78 | 79.17 | 841 | 89.9 | 103.1 | 3.5e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq16384-paged_sm-86_20260903T014717.json) |
-| max | fp16_gqa32x8_hd128_seq16384 | seq16384 gqa32x8 hd128 | 78.78 | 77.72 | 852 | 91.0 | 104.4 | 2.7e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq16384_sm-86_20260903T014658.json) |
+| flashinfer | fp16_gqa32x8_hd128_seq16384_paged | seq16384 gqa32x8 hd128 | 83.04 | 82.28 | 808 | 86.3 | 99.0 | 3.5e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq16384-paged_sm-86_20260903T020242.json) |
+| max | fp16_gqa32x8_hd128_seq16384 | seq16384 gqa32x8 hd128 | 74.68 | 73.87 | 899 | 96.0 | 110.1 | 2.7e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq16384_sm-86_20260903T020222.json) |
 <!-- END GENERATED TABLES -->
 
 ## Reading the results
@@ -212,33 +213,35 @@ results JSON.
   rows read slightly **above the 936 GB/s nominal spec** (up to ~104 %): the shape
   is pure weight streaming and the GDDR6X sustains marginally over the nominal
   figure — `% spec` is normalized to that nominal, not capped at it.
-- **Attention decode: a narrow MAX mid-context gap — confound removed, measured
-  same-session.** MAX `mha_decoding` (+`mha_splitk_reduce`) and FlashInfer's **paged**
-  path (`BatchDecodeWithPagedKVCacheWrapper`, page 128 = MAX's layout) measured
-  **same-session, 3 passes each** (medians; distributions below):
+- **Attention decode: confound removed; large variance, but stable directional
+  signals.** MAX `mha_decoding` (+`mha_splitk_reduce`) and FlashInfer's **paged**
+  path (`BatchDecodeWithPagedKVCacheWrapper`, page 128 = MAX's layout), each **3
+  passes same-session, all 3 medians preserved in the JSON `timing.passes`**. The
+  committed run (median, with the 3-pass range from the JSON):
 
-  | seq | MAX (3×) | FlashInfer paged (3×) | FlashInfer contiguous¹ |
+  | seq | MAX (range) | FlashInfer paged (range) | FlashInfer contiguous¹ |
   |---|---|---|---|
-  | 1024 | 25.6 (25.6–25.6) | 39.2 (39.1–39.3) | 27.0 |
-  | 4096 | **63.7 (60.0–63.8)** | **70.2 (69.7–73.7)** | 79.3 |
-  | 16384 | **91.0 (90.9–91.0)** | 89.9 (89.5–90.0) | 89.7 |
+  | 1024 | 26.9 (26.9–26.9) | 39.4 (38.4–41.2) | 27.0 |
+  | 4096 | 66.5 (66.5–66.6) | **70.0 (67.6–72.9)** | 79.3 |
+  | 16384 | **96.0 (95.8–96.0)** | 86.3 (85.1–89.1) | 89.7 |
 
-  ¹ contiguous FlashInfer (`single_decode_with_kv_cache`) is from an earlier
-  session — context only; the paged column is the apples-to-apples one.
+  ¹ contiguous FlashInfer (`single_decode_with_kv_cache`), earlier session — context
+  only; the paged column is the apples-to-apples one.
 
-  Reading (MAX validated vs its own `mha_gpu_naive`, L2 ~5e-4; both nsys per-kernel,
-  clock 1695): **at long context MAX is at the roofline and a hair *ahead* of
-  FlashInfer** (91.0 vs 89.9 — the earlier "MAX 86.7" was a slow single run). At
-  **seq 4096 there is a real ~6–7-point gap** (MAX 63.7 vs 70.2) — the two 3-pass
-  distributions do not overlap (MAX max 63.8 < FlashInfer min 69.7), so it survives
-  the run-to-run noise. At seq 1024 both are latency-bound (tiny absolute; FlashInfer's
-  paged kernel has less short-seq overhead). Net: MAX decode attention is
-  competitive-to-best at long context; the only real deficit is a **narrow
-  mid-context (seq~4k) gap**. Cause **inferred** (split-K partitioning / occupancy at
-  seq 4096 on 82 SMs), not ncu-measured → a tuning question, not a bug. Much of the
-  original "+17.6-point" gap was the paged-vs-contiguous confound (contiguous
-  FlashInfer read 79.3 %; paging it costs ~9 pts). FlashInfer 0.6.18 / torch
-  2.14+cu130 in `.venv-attn`.
+  **Attention has large run-to-run variance** — a second same-session round gave MAX
+  63.7 / 91.0 and FlashInfer-paged 70.2 / 89.9 at seq 4096 / 16384, i.e. ±5–10 %
+  swings. So read the *direction*, which is stable across both rounds (MAX validated
+  vs its own `mha_gpu_naive`, L2 ~5e-4; nsys per-kernel, clock 1695): **at long
+  context (16k) MAX is at the roofline and *ahead* of FlashInfer** (96 vs 86 this
+  round; 91 vs 90 the other — MAX ahead both times; the first, confounded "MAX 86.7"
+  was a slow single run). At **seq 4096 FlashInfer is modestly ahead (~3–7 pts)** —
+  here MAX 66.5 vs 70.0, ranges nearly touching (MAX 66.6 < FlashInfer 67.6). At seq
+  1024 both are latency-bound (FlashInfer ahead, tiny absolute). Net: MAX decode
+  attention is competitive-to-best at long context; the only soft spot is a
+  **modest mid-context (seq~4k) gap**, cause **inferred** (split-K / occupancy at
+  82 SMs), not ncu-measured → a tuning question, not a bug. Much of the original
+  "+17.6-point" gap was the paged-vs-contiguous confound (contiguous FlashInfer
+  79.3 %; paging costs ~9 pts). FlashInfer 0.6.18 / torch 2.14+cu130 in `.venv-attn`.
 
 ## Anomalies and caveats
 
@@ -280,13 +283,12 @@ results JSON.
   quiet burst suggests). Per-shape differences smaller than that band are **not**
   claimed; the ours-vs-llama Q4_0 comparison is same-session and read as parity.
 - **Not every result got the 3-pass treatment.** The ours/llama **Q4_0** headline
-  is 3-pass same-session with all pass medians + input hashes in the JSON. The
-  **attention** MAX-vs-FlashInfer(paged) comparison is 3-pass same-session too (the
-  per-seq ranges are shown in the attention table), but only the median run's JSON
-  is retained — the attention runners don't yet store `passes[]`. The remaining
-  baselines (MAX GEMV, Q8_0/Q4_K, cuBLAS, FlashInfer-contiguous) are **single
-  representative nsys runs** — read their point estimates with the same 0–9 %
-  caution, and treat sub-5 % differences as ties.
+  and the **attention** MAX-vs-FlashInfer(paged) comparison are 3-pass same-session
+  with all pass medians preserved in each JSON's `timing.passes` (the per-seq/shape
+  ranges in the tables come from those); the Q4_0 JSONs also carry input hashes. The
+  remaining baselines (MAX GEMV, Q8_0/Q4_K, cuBLAS, FlashInfer-contiguous) are
+  **single representative nsys runs** — read their point estimates with the same
+  0–9 % caution, and treat sub-5 % differences as ties.
 - **`harness_sha` is `…-dirty` on most JSONs (53 of 68).** The base commit is
   recorded and `bench/env.py` ignores generated outputs when computing dirtiness,
   but a JSON does **not** capture the exact uncommitted source diff that produced
@@ -320,7 +322,7 @@ and the shared desktop steals bandwidth — run-to-run spread 0–9 %):
 |---|---|---|---|
 | o_proj 4096×4096 | compile-fail (g32) | **13.7 µs / 73.8 / 74.5** | 13.9 µs / 72.6 / 72.7 |
 | qkv 6144×4096 | compile-fail (g32) | **19.6 µs / 77.4 / 82.5** | 18.1 µs / 83.7 / 83.8 |
-| down_proj 4096×14336 | 43.5 µs / 81.2 % | **38.4 µs / 92.0 / 92.0** | 38.0 µs / 92.9 / 94.7 |
+| down_proj 4096×14336 | 43.5 µs / 81.2 % | **38.4 µs / 92.0 / 92.0** | 38.0 µs / 92.9 / 94.8 |
 | up_proj 14336×4096 | 51.6 µs / 68.4 % | **41.7 µs / 84.8 / 88.1** | 39.9 µs / 88.5 / 88.5 |
 | gate_up 28672×4096 | 474 µs / 14.9 % | **77.0 µs / 91.7 / 91.8** | 70.6 µs / 100.1 / 100.1 |
 | lm_head 128256×4096 | 2031 µs / 15.6 % | **312 µs / 101.2 / 101.9** | 311 µs / 101.5 / 101.5 |
@@ -384,12 +386,13 @@ are still not versioned.
 
 **Third review (approved as experimental benchmark; residual fixes).** Fixed here:
 (1) stale README attention text (still 79.3 %/confounded/pending) updated to the
-resolved result. (2) The seq-4096 attention gap is no longer stated on single runs:
-**re-measured MAX and paged FlashInfer same-session, 3 passes each** — MAX 63.7 %
-(60.0–63.8) vs FlashInfer 70.2 % (69.7–73.7), non-overlapping, so the ~6–7-pt gap
-survives noise; and at seq 16384 MAX (91.0) is actually a hair ahead (the earlier
-"86.7 / MAX behind" was a slow single run). The cause stays an *inferred* tuning
-gap, not asserted. (3) The input-hash claim is scoped to ours/llama Q4_0 (the MAX
+resolved result. (2) The attention 3-pass envelope is now **stored in the JSONs** (`timing.passes`),
+not just written in prose — the attention runners take `--passes` and preserve all
+pass medians. Re-measured MAX and paged FlashInfer same-session; at seq 4096 MAX
+66.5 vs FlashInfer 70.0 (FlashInfer ahead in both rounds, ~3–7 pts) and at seq
+16384 MAX is *ahead* (96.0 vs 86.3; the earlier "86.7 / MAX behind" was a slow
+single run). Attention has ±5–10 % run-to-run variance, so only the direction is
+claimed; the cause stays an *inferred* tuning gap. (3) The input-hash claim is scoped to ours/llama Q4_0 (the MAX
 JSONs have none). (4) The `-dirty` `harness_sha` (53/68) and (7) the ~0.2 %
 byte-count undercount for F32-activation/output quant rows are now declared as
 limitations. (5) "faster than MAX on all six" → faster on the four MAX can run;

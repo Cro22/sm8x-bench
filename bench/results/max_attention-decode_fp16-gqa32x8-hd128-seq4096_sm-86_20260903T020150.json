@@ -1,0 +1,250 @@
+{
+  "schema": 1,
+  "impl": "max",
+  "kernel": "attention_decode",
+  "variant": "fp16_gqa32x8_hd128_seq4096",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 3090",
+    "arch": "sm_86",
+    "compute_capability": "8.6",
+    "sms": 82,
+    "driver": "610.62",
+    "cuda_driver_version": "13.3",
+    "graphics_clock_mhz_current": 1695,
+    "graphics_clock_mhz_max": 2100,
+    "graphics_clock_mhz_locked": 1695,
+    "mem_clock_mhz": 810,
+    "mem_clock_mhz_max": 9751,
+    "mem_clock_locked": false,
+    "power_limit_w": 420.0,
+    "graphics_clock_mhz_observed": {
+      "min": 1695,
+      "max": 1695,
+      "median": 1695,
+      "n": 74
+    }
+  },
+  "shape": {
+    "batch": 1,
+    "q_heads": 32,
+    "kv_heads": 8,
+    "head_dim": 128,
+    "seq_len": 4096,
+    "page_size": 128
+  },
+  "dtype": {
+    "kv": "fp16",
+    "q": "fp16",
+    "accum": "fp32"
+  },
+  "bytes_moved": 16777216,
+  "flops": 67108864,
+  "timing": {
+    "source": "nsys_gpukernsum",
+    "n_instances": 262,
+    "launches_per_sample": 0,
+    "median_us": 26.956,
+    "min_us": 25.69,
+    "nsys_mean_us": 26.9834,
+    "passes": 3,
+    "pass_medians_us": [
+      26.9,
+      26.956,
+      26.956
+    ],
+    "pass_spread_pct": 0.21,
+    "pass_detail": [
+      {
+        "median_us": 26.956,
+        "min_us": 25.69,
+        "max_us": 29.491,
+        "nsys_mean_us": 26.9834,
+        "n_instances": 262,
+        "kernels": [
+          {
+            "name": "mha_decoding_depth128_float16_float16_16x128x32_True_nqh32_nkvh8_6f96a9cc",
+            "instances": 131,
+            "avg_us": 24.8297,
+            "med_us": 24.825,
+            "min_us": 23.616,
+            "max_us": 27.187,
+            "stddev_us": 0.3591
+          },
+          {
+            "name": "mha_splitk_reduce_float16_float16_57fed817",
+            "instances": 131,
+            "avg_us": 2.1537,
+            "med_us": 2.131,
+            "min_us": 2.074,
+            "max_us": 2.304,
+            "stddev_us": 0.0516
+          }
+        ],
+        "warning": "",
+        "observed_sm_clock": {
+          "min": 1695,
+          "max": 1695,
+          "median": 1695,
+          "n": 82
+        },
+        "wall_samples_us": [
+          51.846,
+          58.166,
+          55.302,
+          54.96,
+          50.051,
+          54.013,
+          55.933,
+          55.091,
+          63.792,
+          66.685,
+          50.528,
+          51.514
+        ]
+      },
+      {
+        "median_us": 26.9,
+        "min_us": 25.919,
+        "max_us": 29.952,
+        "nsys_mean_us": 26.943,
+        "n_instances": 262,
+        "kernels": [
+          {
+            "name": "mha_decoding_depth128_float16_float16_16x128x32_True_nqh32_nkvh8_6f96a9cc",
+            "instances": 131,
+            "avg_us": 24.7861,
+            "med_us": 24.768,
+            "min_us": 23.817,
+            "max_us": 27.59,
+            "stddev_us": 0.3998
+          },
+          {
+            "name": "mha_splitk_reduce_float16_float16_57fed817",
+            "instances": 131,
+            "avg_us": 2.1569,
+            "med_us": 2.132,
+            "min_us": 2.102,
+            "max_us": 2.362,
+            "stddev_us": 0.0482
+          }
+        ],
+        "warning": "",
+        "observed_sm_clock": {
+          "min": 1695,
+          "max": 1695,
+          "median": 1695,
+          "n": 58
+        },
+        "wall_samples_us": [
+          57.875,
+          57.824,
+          54.042,
+          52.675,
+          51.28,
+          51.728,
+          50.4,
+          52.064,
+          53.581,
+          48.458,
+          54.781,
+          50.707
+        ]
+      },
+      {
+        "median_us": 26.956,
+        "min_us": 25.775,
+        "max_us": 29.606,
+        "nsys_mean_us": 26.9915,
+        "n_instances": 262,
+        "kernels": [
+          {
+            "name": "mha_decoding_depth128_float16_float16_16x128x32_True_nqh32_nkvh8_6f96a9cc",
+            "instances": 131,
+            "avg_us": 24.8328,
+            "med_us": 24.796,
+            "min_us": 23.702,
+            "max_us": 27.302,
+            "stddev_us": 0.3812
+          },
+          {
+            "name": "mha_splitk_reduce_float16_float16_57fed817",
+            "instances": 131,
+            "avg_us": 2.1587,
+            "med_us": 2.16,
+            "min_us": 2.073,
+            "max_us": 2.304,
+            "stddev_us": 0.0497
+          }
+        ],
+        "warning": "",
+        "observed_sm_clock": {
+          "min": 1695,
+          "max": 1695,
+          "median": 1695,
+          "n": 74
+        },
+        "wall_samples_us": [
+          57.427,
+          57.933,
+          52.528,
+          53.869,
+          66.496,
+          53.133,
+          59.485,
+          50.989,
+          96.998,
+          58.714,
+          53.814,
+          54.233
+        ]
+      }
+    ],
+    "harness_wallclock_median_us": 55.026,
+    "kernels": [
+      {
+        "name": "mha_decoding_depth128_float16_float16_16x128x32_True_nqh32_nkvh8_6f96a9cc",
+        "instances": 131,
+        "avg_us": 24.8297,
+        "med_us": 24.825,
+        "min_us": 23.616,
+        "max_us": 27.187,
+        "stddev_us": 0.3591
+      },
+      {
+        "name": "mha_splitk_reduce_float16_float16_57fed817",
+        "instances": 131,
+        "avg_us": 2.1537,
+        "med_us": 2.131,
+        "min_us": 2.074,
+        "max_us": 2.304,
+        "stddev_us": 0.0516
+      }
+    ]
+  },
+  "achieved_gbps": 622.39,
+  "achieved_tflops": 2.49,
+  "roofline": {
+    "spec_gbps": 936.0,
+    "measured_gbps": 816.3,
+    "pct_spec": 66.5,
+    "pct_measured": 76.2
+  },
+  "correctness": {
+    "validated": true,
+    "l2_rel_err": 0.00037812174,
+    "max_abs_err": 0.0007324219,
+    "max_rel_err": 0.001472751,
+    "tolerance": "l2_rel<2e-2 (vs mha_gpu_naive)"
+  },
+  "env": {
+    "mojo_version": "1.0.0",
+    "max_version": "26.5.0",
+    "modular_sha": "b4497b7ce9ba96331c72c637ad41b44bab374f33",
+    "cuda_version": "13.3",
+    "llamacpp_sha": "",
+    "flashinfer_version": "unknown",
+    "harness_sha": "b6a0e5d2f13c7a2e327d0bb548672352eafb6875-dirty",
+    "timestamp_utc": "2026-09-03T02:01:50.289800+00:00"
+  },
+  "notes": "nsys-authoritative; kernel(s): mha_decoding_depth128_float16_float16_16x128x32_True_nqh32_nkvh8_6f96a9cc, mha_splitk_reduce_float16_float16_57fed817. correctness vs mha_gpu_naive. median of 3 passes [26.9, 26.956, 26.956] us (spread 0.21%); all preserved in timing.passes. "
+}

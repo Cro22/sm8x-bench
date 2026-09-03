@@ -52,6 +52,9 @@ def main() -> int:
     ap.add_argument("--seq", type=int, required=True,
                     help="KV context length (one of shapes.ATTN_SEQ_LENS)")
     ap.add_argument("--kv-dtype", default="fp16", choices=["fp16", "bf16"])
+    ap.add_argument("--passes", type=int, default=3,
+                    help="independent nsys runs; median run reported, all pass "
+                         "medians preserved in timing.passes")
     ap.add_argument("--locked-clock", type=int, default=None)
     ap.add_argument("--measured-gbps", type=float, default=None)
     ap.add_argument("--gpu-index", type=int, default=0)
@@ -59,43 +62,51 @@ def main() -> int:
 
     ensure_built()
     cmd = [str(BINARY), str(args.seq), "2e-2", "2e-3"]
-    print(f"profiling under nsys: attention decode seq={args.seq} ...")
-    rows = nsys.kernel_summary(cmd, cwd=_REPO)
-    meta = rows[0]
-    out = meta.get("__stdout__", "")
-    if meta.get("__returncode__", 1) != 0:
-        print(out); print("ABORT: entry exited non-zero.", file=sys.stderr); return 1
 
-    cm = _CORR.search(out)
-    if not cm:
-        print(out); print("ABORT: no correctness line.", file=sys.stderr); return 1
-    if cm[1] != "PASS":
-        print("ABORT: correctness FAILED; not recording.", file=sys.stderr); return 1
-    l2_rel, max_abs, max_rel = float(cm[2]), float(cm[3]), float(cm[4])
+    l2_rel = max_abs = max_rel = None
+    passes = []
+    for pi in range(args.passes):
+        print(f"profiling under nsys: attention decode seq={args.seq} "
+              f"(pass {pi+1}/{args.passes}) ...")
+        rows = nsys.kernel_summary(cmd, cwd=_REPO)
+        meta = rows[0]
+        out = meta.get("__stdout__", "")
+        if meta.get("__returncode__", 1) != 0:
+            print(out); print("ABORT: entry exited non-zero.", file=sys.stderr); return 1
+        cm = _CORR.search(out)
+        if not cm:
+            print(out); print("ABORT: no correctness line.", file=sys.stderr); return 1
+        if cm[1] != "PASS":
+            print("ABORT: correctness FAILED; not recording.", file=sys.stderr); return 1
+        l2_rel, max_abs, max_rel = float(cm[2]), float(cm[3]), float(cm[4])
+        kt = nsys.per_invocation_us(rows)
+        if kt["med_us"] is None:
+            print("ABORT: nsys found no GPU kernels.", file=sys.stderr); return 1
+        wall = [float(v) for v in (_SAMPLES.search(out)[1].replace(" ", "").split(",")
+                                   if _SAMPLES.search(out) else []) if v]
+        passes.append({
+            "median_us": kt["med_us"], "min_us": kt["min_us"],
+            "max_us": kt.get("max_us"), "nsys_mean_us": kt["avg_us"],
+            "n_instances": sum(k["instances"] for k in kt["kernels"]),
+            "kernels": kt["kernels"], "warning": kt["warning"],
+            "observed_sm_clock": meta.get("__sm_clock_mhz__"),
+            "wall_samples_us": [round(v, 3) for v in wall],
+        })
 
-    kt = nsys.per_invocation_us(rows)
-    if kt["med_us"] is None:
-        print("ABORT: nsys found no GPU kernels.", file=sys.stderr); return 1
+    pass_meds = sorted(pr["median_us"] for pr in passes)
+    median_us = pass_meds[len(pass_meds) // 2]
+    rep = min(passes, key=lambda pr: abs(pr["median_us"] - median_us))
+    spread_pct = round(100 * (pass_meds[-1] - pass_meds[0]) / median_us, 2)
 
-    wall_median = None
-    sm = _SAMPLES.search(out)
-    if sm:
-        s = [float(v) for v in sm[1].replace(" ", "").split(",") if v]
-        if s:
-            wall_median = round(st.median(s), 3)
-
-    median_us = kt["med_us"]
     q_heads, kv_heads, head_dim = shapes.Q_HEADS, shapes.KV_HEADS, shapes.HEAD_DIM
     bytes_moved = roofline.attention_decode_bytes(args.seq, kv_heads, head_dim, 2)
-    # flops: QK^T + softmax*V, per query token, batch 1 -> ~4 * seq * q_heads * head_dim
     flops = 4 * args.seq * q_heads * head_dim
-    kernel_names = ", ".join(k["name"] for k in kt["kernels"])
-
-    note = f"nsys-authoritative; kernel(s): {kernel_names}. correctness vs mha_gpu_naive. "
-    if kt["warning"]:
-        note += "WARN " + kt["warning"] + ". "
-    if wall_median is not None:
-        note += f"harness wall-clock median {wall_median} us ({wall_median/median_us:.1f}x nsys). "
+    kernel_names = ", ".join(k["name"] for k in rep["kernels"])
+    note = (f"nsys-authoritative; kernel(s): {kernel_names}. correctness vs "
+            f"mha_gpu_naive. median of {args.passes} passes {pass_meds} us "
+            f"(spread {spread_pct}%); all preserved in timing.passes. ")
+    if rep["warning"]:
+        note += "WARN " + rep["warning"] + ". "
 
     path = write_result(
         impl="max",
@@ -108,13 +119,16 @@ def main() -> int:
         flops=flops,
         timing={
             "source": "nsys_gpukernsum",
-            "n_instances": sum(k["instances"] for k in kt["kernels"]),
+            "n_instances": rep["n_instances"],
             "launches_per_sample": 0,
-            "median_us": median_us, "q1_us": 0, "q3_us": 0,
-            "min_us": kt["min_us"], "p95_us": 0,
-            "nsys_mean_us": kt["avg_us"],
-            "harness_wallclock_median_us": wall_median,
-            "kernels": kt["kernels"],
+            "median_us": median_us, "min_us": rep["min_us"],
+            "nsys_mean_us": rep["nsys_mean_us"],
+            "passes": args.passes, "pass_medians_us": pass_meds,
+            "pass_spread_pct": spread_pct, "pass_detail": passes,
+            "harness_wallclock_median_us": (
+                round(st.median(rep["wall_samples_us"]), 3)
+                if rep["wall_samples_us"] else None),
+            "kernels": rep["kernels"],
         },
         correctness={"validated": True, "l2_rel_err": l2_rel,
                      "max_abs_err": max_abs, "max_rel_err": max_rel,

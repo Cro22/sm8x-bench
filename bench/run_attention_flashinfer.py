@@ -36,6 +36,9 @@ def main() -> int:
     ap.add_argument("--seq", type=int, default=16384, choices=shapes.ATTN_SEQ_LENS)
     ap.add_argument("--paged", action="store_true",
                     help="paged KV (page 128, like MAX) instead of contiguous KV")
+    ap.add_argument("--passes", type=int, default=3,
+                    help="independent nsys runs; median run reported, all pass "
+                         "medians preserved in timing.passes")
     ap.add_argument("--locked-clock", type=int, default=None)
     ap.add_argument("--measured-gbps", type=float, default=None)
     ap.add_argument("--gpu-index", type=int, default=0)
@@ -50,48 +53,54 @@ def main() -> int:
 
     mode = "paged" if args.paged else "contiguous"
     cmd = [str(VENV_PY), str(DRIVER), str(seq), mode]
-    print(f"profiling under nsys: FlashInfer decode seq{seq} ({mode}) ...")
-    rows = nsys.kernel_summary(cmd, cwd=_REPO,
-                               env={"FLASHINFER_DISABLE_VERSION_CHECK": "1"})
-    meta = rows[0]
-    out = meta.get("__stdout__", "")
-    if meta.get("__returncode__", 1) != 0:
-        print(out); print("ABORT: driver exited non-zero."); return 1
 
-    cm = _CORR.search(out)
-    if not cm:
-        print(out); print("ABORT: no correctness line."); return 1
-    if cm[1] != "PASS":
-        print("ABORT: correctness FAILED."); return 1
-    l2_rel, max_abs, max_rel = float(cm[2]), float(cm[3]), float(cm[4])
+    l2_rel = max_abs = max_rel = None
+    passes = []
+    for pi in range(args.passes):
+        print(f"profiling under nsys: FlashInfer decode seq{seq} ({mode}) "
+              f"(pass {pi+1}/{args.passes}) ...")
+        rows = nsys.kernel_summary(cmd, cwd=_REPO,
+                                   env={"FLASHINFER_DISABLE_VERSION_CHECK": "1"})
+        meta = rows[0]
+        out = meta.get("__stdout__", "")
+        if meta.get("__returncode__", 1) != 0:
+            print(out); print("ABORT: driver exited non-zero."); return 1
+        cm = _CORR.search(out)
+        if not cm:
+            print(out); print("ABORT: no correctness line."); return 1
+        if cm[1] != "PASS":
+            print("ABORT: correctness FAILED."); return 1
+        l2_rel, max_abs, max_rel = float(cm[2]), float(cm[3]), float(cm[4])
+        kt = nsys.per_invocation_us(rows)
+        if kt["med_us"] is None:
+            print("ABORT: nsys found no GPU kernels."); return 1
+        wall = [float(v) for v in (_SAMPLES.search(out)[1].replace(" ", "").split(",")
+                                   if _SAMPLES.search(out) else []) if v]
+        passes.append({
+            "median_us": kt["med_us"], "min_us": kt["min_us"],
+            "max_us": kt.get("max_us"), "nsys_mean_us": kt["avg_us"],
+            "n_instances": sum(k["instances"] for k in kt["kernels"]),
+            "kernels": kt["kernels"], "warning": kt["warning"],
+            "observed_sm_clock": meta.get("__sm_clock_mhz__"),
+            "wall_samples_us": [round(v, 3) for v in wall],
+        })
 
-    kt = nsys.per_invocation_us(rows)
-    if kt["med_us"] is None:
-        print("ABORT: nsys found no GPU kernels."); return 1
+    pass_meds = sorted(pr["median_us"] for pr in passes)
+    median_us = pass_meds[len(pass_meds) // 2]
+    rep = min(passes, key=lambda pr: abs(pr["median_us"] - median_us))
+    spread_pct = round(100 * (pass_meds[-1] - pass_meds[0]) / median_us, 2)
 
-    wall_median = None
-    sm = _SAMPLES.search(out)
-    if sm:
-        s = [float(v) for v in sm[1].replace(" ", "").split(",") if v]
-        if s:
-            wall_median = round(st.median(s), 3)
-
-    median_us = kt["med_us"]
     bytes_moved = roofline.attention_decode_bytes(seq, kv_heads, head_dim)
-    kernel_names = ", ".join(k["name"] for k in kt["kernels"])
-
-    if args.paged:
-        note = (f"FlashInfer BatchDecodeWithPagedKVCacheWrapper, PAGED KV page 128 "
-                f"(matches MAX's paged read); nsys kernel(s): {kernel_names}. "
-                f"plan() outside the timed loop. torch 2.14+cu130. ")
-    else:
-        note = (f"FlashInfer single_decode_with_kv_cache; nsys kernel(s): "
-                f"{kernel_names}. Contiguous KV (MAX reads paged, page 128); both read "
-                f"the whole KV once so the roofline comparison holds. torch 2.14+cu130. ")
-    if kt["warning"]:
-        note += "WARN " + kt["warning"] + ". "
-    if wall_median is not None:
-        note += f"harness wall-clock median {wall_median} us. "
+    kernel_names = ", ".join(k["name"] for k in rep["kernels"])
+    kvnote = ("PAGED KV page 128 (matches MAX's paged read); plan() outside the "
+              "timed loop" if args.paged else
+              "Contiguous KV (MAX reads paged); both read the whole KV once")
+    note = (f"FlashInfer {'BatchDecodeWithPagedKVCacheWrapper' if args.paged else 'single_decode_with_kv_cache'}; "
+            f"{kvnote}; nsys kernel(s): {kernel_names}. torch 2.14+cu130. "
+            f"median of {args.passes} passes {pass_meds} us (spread {spread_pct}%); "
+            f"all preserved in timing.passes. ")
+    if rep["warning"]:
+        note += "WARN " + rep["warning"] + ". "
 
     path = write_result(
         impl="flashinfer",
@@ -105,20 +114,23 @@ def main() -> int:
         flops=0,
         timing={
             "source": "nsys_gpukernsum",
-            "n_instances": sum(k["instances"] for k in kt["kernels"]),
+            "n_instances": rep["n_instances"],
             "launches_per_sample": 0,
-            "median_us": median_us, "q1_us": 0, "q3_us": 0,
-            "min_us": kt["min_us"], "p95_us": 0,
-            "nsys_mean_us": kt["avg_us"],
-            "harness_wallclock_median_us": wall_median,
-            "kernels": kt["kernels"],
+            "median_us": median_us, "min_us": rep["min_us"],
+            "nsys_mean_us": rep["nsys_mean_us"],
+            "passes": args.passes, "pass_medians_us": pass_meds,
+            "pass_spread_pct": spread_pct, "pass_detail": passes,
+            "harness_wallclock_median_us": (
+                round(st.median(rep["wall_samples_us"]), 3)
+                if rep["wall_samples_us"] else None),
+            "kernels": rep["kernels"],
         },
         correctness={"validated": True, "l2_rel_err": l2_rel,
                      "max_abs_err": max_abs, "max_rel_err": max_rel,
                      "tolerance": "l2_rel<3e-2 (vs fp32 softmax ref)"},
         graphics_clock_mhz_locked=args.locked_clock,
         mem_clock_locked=False,
-        observed_sm_clock=meta.get("__sm_clock_mhz__"),
+        observed_sm_clock=rep["observed_sm_clock"],
         measured_gbps=args.measured_gbps,
         notes=note,
         gpu_index=args.gpu_index,

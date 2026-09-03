@@ -1,0 +1,250 @@
+{
+  "schema": 1,
+  "impl": "flashinfer",
+  "kernel": "attention_decode",
+  "variant": "fp16_gqa32x8_hd128_seq16384_paged",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 3090",
+    "arch": "sm_86",
+    "compute_capability": "8.6",
+    "sms": 82,
+    "driver": "610.62",
+    "cuda_driver_version": "13.3",
+    "graphics_clock_mhz_current": 1695,
+    "graphics_clock_mhz_max": 2100,
+    "graphics_clock_mhz_locked": 1695,
+    "mem_clock_mhz": 810,
+    "mem_clock_mhz_max": 9751,
+    "mem_clock_locked": false,
+    "power_limit_w": 420.0,
+    "graphics_clock_mhz_observed": {
+      "min": 1695,
+      "max": 1695,
+      "median": 1695,
+      "n": 116
+    }
+  },
+  "shape": {
+    "batch": 1,
+    "q_heads": 32,
+    "kv_heads": 8,
+    "head_dim": 128,
+    "seq_len": 16384,
+    "page_size": 128
+  },
+  "dtype": {
+    "q": "fp16",
+    "kv": "fp16",
+    "accum": "fp32"
+  },
+  "bytes_moved": 67108864,
+  "flops": 0,
+  "timing": {
+    "source": "nsys_gpukernsum",
+    "n_instances": 262,
+    "launches_per_sample": 0,
+    "median_us": 83.037,
+    "min_us": 82.284,
+    "nsys_mean_us": 86.5016,
+    "passes": 3,
+    "pass_medians_us": [
+      80.496,
+      83.037,
+      84.184
+    ],
+    "pass_spread_pct": 4.44,
+    "pass_detail": [
+      {
+        "median_us": 80.496,
+        "min_us": 79.493,
+        "max_us": 87.093,
+        "nsys_mean_us": 80.7745,
+        "n_instances": 262,
+        "kernels": [
+          {
+            "name": "void flashinfer::BatchDecodeWithPagedKVCacheKernel<(flashinfer::PosEncodingMode)0, (unsigned int)2,\u2026",
+            "instances": 131,
+            "avg_us": 76.6658,
+            "med_us": 76.392,
+            "min_us": 75.481,
+            "max_us": 82.776,
+            "stddev_us": 0.9501
+          },
+          {
+            "name": "void flashinfer::PersistentVariableLengthMergeStatesKernel<(unsigned int)8, (unsigned int)16, (unsi\u2026",
+            "instances": 131,
+            "avg_us": 4.1087,
+            "med_us": 4.104,
+            "min_us": 4.012,
+            "max_us": 4.317,
+            "stddev_us": 0.0513
+          }
+        ],
+        "warning": "",
+        "observed_sm_clock": {
+          "min": 1695,
+          "max": 1695,
+          "median": 1695,
+          "n": 126
+        },
+        "wall_samples_us": [
+          94.512,
+          92.602,
+          90.88,
+          90.87,
+          98.893,
+          90.589,
+          91.946,
+          91.318,
+          90.803,
+          96.032,
+          96.195,
+          90.515
+        ]
+      },
+      {
+        "median_us": 83.037,
+        "min_us": 82.284,
+        "max_us": 499.76,
+        "nsys_mean_us": 86.5016,
+        "n_instances": 262,
+        "kernels": [
+          {
+            "name": "void flashinfer::BatchDecodeWithPagedKVCacheKernel<(flashinfer::PosEncodingMode)0, (unsigned int)2,\u2026",
+            "instances": 131,
+            "avg_us": 82.2533,
+            "med_us": 78.801,
+            "min_us": 78.142,
+            "max_us": 495.335,
+            "stddev_us": 36.3791
+          },
+          {
+            "name": "void flashinfer::PersistentVariableLengthMergeStatesKernel<(unsigned int)8, (unsigned int)16, (unsi\u2026",
+            "instances": 131,
+            "avg_us": 4.2483,
+            "med_us": 4.236,
+            "min_us": 4.142,
+            "max_us": 4.425,
+            "stddev_us": 0.0564
+          }
+        ],
+        "warning": "",
+        "observed_sm_clock": {
+          "min": 1695,
+          "max": 1695,
+          "median": 1695,
+          "n": 116
+        },
+        "wall_samples_us": [
+          95.005,
+          92.56,
+          90.454,
+          92.259,
+          91.187,
+          89.674,
+          92.368,
+          90.909,
+          92.0,
+          140.32,
+          98.208,
+          95.83
+        ]
+      },
+      {
+        "median_us": 84.184,
+        "min_us": 83.231,
+        "max_us": 87.68,
+        "nsys_mean_us": 84.3987,
+        "n_instances": 262,
+        "kernels": [
+          {
+            "name": "void flashinfer::BatchDecodeWithPagedKVCacheKernel<(flashinfer::PosEncodingMode)0, (unsigned int)2,\u2026",
+            "instances": 131,
+            "avg_us": 80.1053,
+            "med_us": 79.894,
+            "min_us": 79.005,
+            "max_us": 83.167,
+            "stddev_us": 0.8455
+          },
+          {
+            "name": "void flashinfer::PersistentVariableLengthMergeStatesKernel<(unsigned int)8, (unsigned int)16, (unsi\u2026",
+            "instances": 131,
+            "avg_us": 4.2934,
+            "med_us": 4.29,
+            "min_us": 4.226,
+            "max_us": 4.513,
+            "stddev_us": 0.0496
+          }
+        ],
+        "warning": "",
+        "observed_sm_clock": {
+          "min": 1695,
+          "max": 1695,
+          "median": 1695,
+          "n": 114
+        },
+        "wall_samples_us": [
+          94.794,
+          92.253,
+          91.651,
+          91.824,
+          94.227,
+          92.435,
+          92.013,
+          97.795,
+          92.438,
+          93.27,
+          91.786,
+          92.49
+        ]
+      }
+    ],
+    "harness_wallclock_median_us": 92.314,
+    "kernels": [
+      {
+        "name": "void flashinfer::BatchDecodeWithPagedKVCacheKernel<(flashinfer::PosEncodingMode)0, (unsigned int)2,\u2026",
+        "instances": 131,
+        "avg_us": 82.2533,
+        "med_us": 78.801,
+        "min_us": 78.142,
+        "max_us": 495.335,
+        "stddev_us": 36.3791
+      },
+      {
+        "name": "void flashinfer::PersistentVariableLengthMergeStatesKernel<(unsigned int)8, (unsigned int)16, (unsi\u2026",
+        "instances": 131,
+        "avg_us": 4.2483,
+        "med_us": 4.236,
+        "min_us": 4.142,
+        "max_us": 4.425,
+        "stddev_us": 0.0564
+      }
+    ]
+  },
+  "achieved_gbps": 808.18,
+  "achieved_tflops": 0.0,
+  "roofline": {
+    "spec_gbps": 936.0,
+    "measured_gbps": 816.3,
+    "pct_spec": 86.3,
+    "pct_measured": 99.0
+  },
+  "correctness": {
+    "validated": true,
+    "l2_rel_err": 0.000349798,
+    "max_abs_err": 1.95019e-05,
+    "max_rel_err": 0.772074,
+    "tolerance": "l2_rel<3e-2 (vs fp32 softmax ref)"
+  },
+  "env": {
+    "mojo_version": "1.0.0",
+    "max_version": "26.5.0",
+    "modular_sha": "b4497b7ce9ba96331c72c637ad41b44bab374f33",
+    "cuda_version": "13.3",
+    "llamacpp_sha": "",
+    "flashinfer_version": "unknown",
+    "harness_sha": "b6a0e5d2f13c7a2e327d0bb548672352eafb6875-dirty",
+    "timestamp_utc": "2026-09-03T02:02:42.037170+00:00"
+  },
+  "notes": "FlashInfer BatchDecodeWithPagedKVCacheWrapper; PAGED KV page 128 (matches MAX's paged read); plan() outside the timed loop; nsys kernel(s): void flashinfer::BatchDecodeWithPagedKVCacheKernel<(flashinfer::PosEncodingMode)0, (unsigned int)2,\u2026, void flashinfer::PersistentVariableLengthMergeStatesKernel<(unsigned int)8, (unsigned int)16, (unsi\u2026. torch 2.14+cu130. median of 3 passes [80.496, 83.037, 84.184] us (spread 4.44%); all preserved in timing.passes. "
+}
