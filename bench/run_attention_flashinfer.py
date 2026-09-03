@@ -34,6 +34,8 @@ _SAMPLES = re.compile(r"samples_us=\s*([\d.,eE+\- ]+)")
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--seq", type=int, default=16384, choices=shapes.ATTN_SEQ_LENS)
+    ap.add_argument("--paged", action="store_true",
+                    help="paged KV (page 128, like MAX) instead of contiguous KV")
     ap.add_argument("--locked-clock", type=int, default=None)
     ap.add_argument("--measured-gbps", type=float, default=None)
     ap.add_argument("--gpu-index", type=int, default=0)
@@ -46,8 +48,9 @@ def main() -> int:
     q_heads, kv_heads, head_dim = a["q_heads"], a["kv_heads"], a["head_dim"]
     seq = args.seq
 
-    cmd = [str(VENV_PY), str(DRIVER), str(seq)]
-    print(f"profiling under nsys: FlashInfer decode seq{seq} ...")
+    mode = "paged" if args.paged else "contiguous"
+    cmd = [str(VENV_PY), str(DRIVER), str(seq), mode]
+    print(f"profiling under nsys: FlashInfer decode seq{seq} ({mode}) ...")
     rows = nsys.kernel_summary(cmd, cwd=_REPO,
                                env={"FLASHINFER_DISABLE_VERSION_CHECK": "1"})
     meta = rows[0]
@@ -77,9 +80,14 @@ def main() -> int:
     bytes_moved = roofline.attention_decode_bytes(seq, kv_heads, head_dim)
     kernel_names = ", ".join(k["name"] for k in kt["kernels"])
 
-    note = (f"FlashInfer single_decode_with_kv_cache; nsys kernel(s): "
-            f"{kernel_names}. Contiguous KV (MAX reads paged, page 128); both read "
-            f"the whole KV once so the roofline comparison holds. torch 2.14+cu130. ")
+    if args.paged:
+        note = (f"FlashInfer BatchDecodeWithPagedKVCacheWrapper, PAGED KV page 128 "
+                f"(matches MAX's paged read); nsys kernel(s): {kernel_names}. "
+                f"plan() outside the timed loop. torch 2.14+cu130. ")
+    else:
+        note = (f"FlashInfer single_decode_with_kv_cache; nsys kernel(s): "
+                f"{kernel_names}. Contiguous KV (MAX reads paged, page 128); both read "
+                f"the whole KV once so the roofline comparison holds. torch 2.14+cu130. ")
     if kt["warning"]:
         note += "WARN " + kt["warning"] + ". "
     if wall_median is not None:
@@ -88,7 +96,8 @@ def main() -> int:
     path = write_result(
         impl="flashinfer",
         kernel="attention_decode",
-        variant=f"fp16_gqa{q_heads}x{kv_heads}_hd{head_dim}_seq{seq}",
+        variant=f"fp16_gqa{q_heads}x{kv_heads}_hd{head_dim}_seq{seq}"
+                + ("_paged" if args.paged else ""),
         shape={"batch": 1, "q_heads": q_heads, "kv_heads": kv_heads,
                "head_dim": head_dim, "seq_len": seq, "page_size": shapes.PAGE_SIZE},
         dtype={"q": "fp16", "kv": "fp16", "accum": "fp32"},

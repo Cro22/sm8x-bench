@@ -110,15 +110,17 @@ roofline at long context (86.7% of spec at seq 16384) but only **61.7%** at seq
 gap that MAX leaves on the table at mid context. This revises the earlier
 "attention has no gap" reading.
 
-**Open question / confound:** the FlashInfer number uses **contiguous** KV
-(`single_decode_with_kv_cache`); MAX reads **paged** KV (page 128). Part of the
-seq-4096 gap could be paging overhead rather than kernel efficiency. To
-disambiguate, run FlashInfer's paged path (`BatchDecodeWithPagedKVCacheWrapper`,
-page_size 128) at the same shapes:
-- If paged FlashInfer stays ~79%, the gap is a real MAX `mha_decoding`
-  mid-context inefficiency worth investigating upstream (likely split-K partition
-  count / occupancy at seq 4096 on 82 SMs).
-- If paged FlashInfer drops toward ~62%, the gap is the paged-read pattern, and
-  MAX's kernel is fine — the finding then is about paging cost, not the kernel.
-Either outcome is a concrete, useful result. (Both measured nsys per-kernel,
-clock 1695; FlashInfer 0.6.18 / torch 2.14+cu130.)
+**RESOLVED (2026-09-03) — the confound is removed.** Ran FlashInfer's paged path
+(`BatchDecodeWithPagedKVCacheWrapper`, page 128) at the same shapes. The 18-point
+seq-4096 gap splits: MAX paged 61.7 %, FlashInfer **paged 70.1 %**, FlashInfer
+contiguous 79.3 %. So ~9 points were the paging pattern (79.3→70.1) and **~8 points
+are a genuine MAX `mha_decoding` mid-context inefficiency** (70.1 vs 61.7, same
+paged pattern). At seq 16384 MAX is within ~3 pts (89.3 vs 86.7); at seq 1024 both
+are latency-bound (FlashInfer paged 39.2 % > MAX 25.0 %, tiny absolute).
+
+**Forum-worthy question (narrowed):** on consumer Ampere (82 SMs), MAX
+`mha_decoding` is ~8 points below FlashInfer at seq 4096 on the identical paged KV
+layout, but converges by seq 16384. Is the mid-context split-K partition count /
+occupancy tuned for this SM count, or is a consumer-Ampere sweep welcome? (Not the
+~18-point cliff the first, confounded comparison implied.) All nsys per-kernel,
+clock 1695; FlashInfer 0.6.18 / torch 2.14+cu130.

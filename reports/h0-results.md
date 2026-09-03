@@ -12,9 +12,10 @@ review (see "Corrections" below).
 
 On the RTX 3090 (sm_86), MAX's dense decode GEMV is at the memory-bandwidth limit
 (fp16/bf16 M=1 at **90–97 % of spec** across all projection shapes) and its
-attention decode is near the limit at long context (**86.7 % of spec at 16k**) but
-leaves **~18 points on the table at seq 4096** (61.7 % vs FlashInfer's 79.3 % — a
-gap partly confounded by MAX's paged vs FlashInfer's contiguous KV; see caveats). Its
+attention decode is near the limit at long context (**86.7 % of spec at 16k**) with
+a modest, now-confirmed **mid-context gap**: at seq 4096 MAX is 61.7 % vs
+FlashInfer's **70.1 % on the same paged KV** (~8 points — the rest of the raw
+79.3 % contiguous figure was paging cost; see caveats). Its
 **Q4_0 (4-bit)** path, measured through its real dispatcher, is **uneven**: a
 decode-tuned config gives **69–81 %** on up_proj/down_proj, but shapes that fall
 to the default 128×128 GEMM tile (gate_up/lm_head) run at **~15 %**, and
@@ -145,10 +146,13 @@ results JSON.
 | Impl | Variant | Shape | Median µs | min µs | GB/s | % spec | % meas | L2 err | Validated | JSON |
 |---|---|---|---|---|---|---|---|---|---|---|
 | flashinfer | fp16_gqa32x8_hd128_seq1024 | seq1024 gqa32x8 hd128 | 16.61 | 16.52 | 252 | 27.0 | 30.9 | 3.0e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq1024_sm-86_20260902T234151.json) |
+| flashinfer | fp16_gqa32x8_hd128_seq1024_paged | seq1024 gqa32x8 hd128 | 11.44 | 11.37 | 367 | 39.2 | 44.9 | 2.9e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq1024-paged_sm-86_20260903T013424.json) |
 | max | fp16_gqa32x8_hd128_seq1024 | seq1024 gqa32x8 hd128 | 17.95 | 17.74 | 234 | 25.0 | 28.6 | 4.5e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq1024_sm-86_20260902T025352.json) |
 | flashinfer | fp16_gqa32x8_hd128_seq4096 | seq4096 gqa32x8 hd128 | 22.59 | 22.30 | 743 | 79.3 | 91.0 | 3.6e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq4096_sm-86_20260902T234207.json) |
+| flashinfer | fp16_gqa32x8_hd128_seq4096_paged | seq4096 gqa32x8 hd128 | 25.55 | 25.28 | 657 | 70.1 | 80.4 | 3.5e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq4096-paged_sm-86_20260903T013430.json) |
 | max | fp16_gqa32x8_hd128_seq4096 | seq4096 gqa32x8 hd128 | 29.05 | 27.46 | 578 | 61.7 | 70.7 | 3.8e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq4096_sm-86_20260902T025356.json) |
 | flashinfer | fp16_gqa32x8_hd128_seq16384 | seq16384 gqa32x8 hd128 | 79.96 | 79.20 | 839 | 89.7 | 102.8 | 3.5e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq16384_sm-86_20260902T234214.json) |
+| flashinfer | fp16_gqa32x8_hd128_seq16384_paged | seq16384 gqa32x8 hd128 | 80.32 | 79.59 | 836 | 89.3 | 102.4 | 3.5e-04 | yes | [json](bench/results/flashinfer_attention-decode_fp16-gqa32x8-hd128-seq16384-paged_sm-86_20260903T013435.json) |
 | max | fp16_gqa32x8_hd128_seq16384 | seq16384 gqa32x8 hd128 | 82.66 | 81.54 | 812 | 86.7 | 99.5 | 2.7e-04 | yes | [json](bench/results/max_attention-decode_fp16-gqa32x8-hd128-seq16384_sm-86_20260902T025400.json) |
 <!-- END GENERATED TABLES -->
 
@@ -208,20 +212,30 @@ results JSON.
   rows read slightly **above the 936 GB/s nominal spec** (up to ~104 %): the shape
   is pure weight streaming and the GDDR6X sustains marginally over the nominal
   figure — `% spec` is normalized to that nominal, not capped at it.
-- **Attention decode: MAX at long context, but a mid-context gap vs FlashInfer.**
-  MAX `mha_decoding` (+`mha_splitk_reduce`): seq 16384 **86.7 %** of spec, seq 4096
-  **61.7 %**, seq 1024 **25.0 %** (validated vs MAX's own `mha_gpu_naive`, L2
-  ~5e-4). Short context is latency-bound (at seq 1024 only ~4 MiB of KV is read,
-  too little to saturate the bus). **But FlashInfer's decode on the same GQA
-  32/8, hd128 shapes reaches 27.0 / 79.3 / 89.7 %** — at/above MAX everywhere, and
-  **+17.6 points at seq 4096 (79.3 vs 61.7)**. So the earlier "no attention gap"
-  read is *revised*: at mid context MAX leaves ~18 points on the table that a
-  competitor captures. **Caveat (confound):** FlashInfer here reads **contiguous**
-  KV (`single_decode_with_kv_cache`) while MAX reads **paged** KV (page 128) — part
-  of the seq-4096 gap could be paging overhead, not kernel quality. A paged
-  FlashInfer run (`BatchDecodeWithPagedKVCacheWrapper`, page 128) would disambiguate
-  and is the open follow-up. Both are nsys per-kernel, clock 1695, L2 ~3e-4;
-  FlashInfer 0.6.18 / torch 2.14+cu130 in a separate `.venv-attn`.
+- **Attention decode: a real (but modest) MAX mid-context gap — confound now
+  removed.** MAX `mha_decoding` (+`mha_splitk_reduce`): seq 1024 / 4096 / 16384 =
+  **25.0 / 61.7 / 86.7 %** of spec (validated vs MAX's own `mha_gpu_naive`, L2
+  ~5e-4). The first comparison used FlashInfer with **contiguous** KV
+  (27.0 / 79.3 / 89.7 %) vs MAX's **paged** KV — an unfair +17.6-point seq-4096 gap.
+  Running FlashInfer with the **same paged KV** (`BatchDecodeWithPagedKVCacheWrapper`,
+  page 128) splits it cleanly:
+
+  | seq | MAX paged | FlashInfer **paged** | FlashInfer contiguous |
+  |---|---|---|---|
+  | 1024 | 25.0 % | 39.2 % | 27.0 % |
+  | 4096 | 61.7 % | **70.1 %** | 79.3 % |
+  | 16384 | 86.7 % | 89.3 % | 89.7 % |
+
+  So at seq 4096 the 18-point gap is ~9 points **paging cost** (FlashInfer
+  79.3→70.1 when paged) + ~**8 points a genuine MAX `mha_decoding` inefficiency**
+  (70.1 vs 61.7, same paged pattern). It is real but about half the confounded
+  figure; at seq 16384 MAX is within ~3 points (paging cost amortized); at seq 1024
+  both are latency-bound (tiny absolute, FlashInfer's paged kernel has less
+  short-seq overhead). Net: MAX decode attention is near-roofline at long context
+  and has a **modest, now-confirmed mid-context (seq~4k) gap** vs FlashInfer — a
+  candidate upstream item (likely split-K partitioning / occupancy at seq 4096 on
+  82 SMs), not the ~18-point cliff the confounded read implied. All nsys per-kernel,
+  clock 1695, L2 ~3e-4; FlashInfer 0.6.18 / torch 2.14+cu130 in `.venv-attn`.
 
 ## Anomalies and caveats
 

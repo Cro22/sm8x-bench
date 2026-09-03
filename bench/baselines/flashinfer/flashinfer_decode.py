@@ -18,12 +18,14 @@ import torch
 import flashinfer
 
 H, HKV, D = 32, 8, 128          # q heads, kv heads, head_dim
+PAGE = 128                      # match MAX's paged KV page size
 WARMUP, SAMPLES, PER_BATCH = 10, 12, 10
 
 
 def main() -> int:
     seq = int(sys.argv[1])
-    seed = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+    mode = sys.argv[2] if len(sys.argv) > 2 else "contiguous"   # or "paged"
+    seed = int(sys.argv[3]) if len(sys.argv) > 3 else 0
     dev = torch.device("cuda")
     torch.manual_seed(seed)
 
@@ -42,9 +44,34 @@ def main() -> int:
         a = torch.softmax(s, dim=-1)
         ref[h] = a @ vf[:, kv, :]                       # [D]
 
-    # ---- FlashInfer decode. ----
-    def run():
-        return flashinfer.single_decode_with_kv_cache(q, k, v)
+    # ---- FlashInfer decode: contiguous KV, or paged KV (page 128, like MAX). ----
+    if mode == "paged":
+        num_pages = (seq + PAGE - 1) // PAGE
+        last = seq - (num_pages - 1) * PAGE
+        # Pack the SAME k/v into a paged NHD cache [num_pages, 2, PAGE, HKV, D].
+        kbuf = torch.zeros(num_pages * PAGE, HKV, D, dtype=torch.float16, device=dev)
+        vbuf = torch.zeros(num_pages * PAGE, HKV, D, dtype=torch.float16, device=dev)
+        kbuf[:seq] = k
+        vbuf[:seq] = v
+        kv_data = torch.stack(
+            [kbuf.view(num_pages, PAGE, HKV, D), vbuf.view(num_pages, PAGE, HKV, D)],
+            dim=1,
+        )  # [num_pages, 2, PAGE, HKV, D]
+        indptr = torch.tensor([0, num_pages], dtype=torch.int32, device=dev)
+        indices = torch.arange(num_pages, dtype=torch.int32, device=dev)
+        last_page_len = torch.tensor([last], dtype=torch.int32, device=dev)
+        ws = torch.empty(128 * 1024 * 1024, dtype=torch.uint8, device=dev)
+        wrapper = flashinfer.BatchDecodeWithPagedKVCacheWrapper(ws, "NHD")
+        wrapper.plan(indptr, indices, last_page_len, H, HKV, D, PAGE,
+                     pos_encoding_mode="NONE", data_type=torch.float16,
+                     q_data_type=torch.float16)  # plan is OUTSIDE the timed loop
+        qb = q.unsqueeze(0)  # [1, H, D]
+
+        def run():
+            return wrapper.run(qb, kv_data)[0]   # [H, D]
+    else:
+        def run():
+            return flashinfer.single_decode_with_kv_cache(q, k, v)
 
     out = run().float()
     torch.cuda.synchronize()

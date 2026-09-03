@@ -25,10 +25,10 @@ shapes, close to llama.cpp.
   no gap to close (and it beats cuBLAS at M=1, which falls to a GEMM tile).
   ([details](reports/h0-results.md))
 - **Attention decode** (flash-decoding over paged KV) — near the roofline at long
-  context (86.7 % of spec at 16k) **but with a mid-context gap**: at seq 4096 MAX
-  is 61.7 % while FlashInfer reaches 79.3 % on the same shapes (partly confounded
-  by MAX's paged vs FlashInfer's contiguous KV — a paged FlashInfer run would
-  isolate the kernel; see caveats). Not "nothing to improve".
+  context (86.7 % of spec at 16k) with a **modest, confirmed mid-context gap**: at
+  seq 4096 MAX is 61.7 % vs FlashInfer's **70.1 % on the same paged KV** (~8 pts;
+  the rest of the raw contiguous 79.3 % was paging cost). A tuning gap, not
+  "nothing to improve" — details in [reports/h0-results.md](reports/h0-results.md).
 - **Q4_0 (4-bit) matmul, MAX's real dispatch** — uneven: it **has a decode-tuned
   config** for up_proj/down_proj (69–81 % of roofline), **falls to a datacenter
   GEMM tile** for gate_up/lm_head (15 %), and **fails to compile** for
