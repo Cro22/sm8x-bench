@@ -14,29 +14,35 @@ source line; the compile failure was reproduced this session (see
 `m≤16`/`m≤32` with no group_size guard (`:1417,1429`), and the A-tile load
 `a.tiled_iterator[BM, BK]` (`:737`) is still unmasked in the shared-memory prefetch.
 
-**But there is an open, directly-relevant PR — coordinate, do not duplicate:**
+**Two open, directly-relevant PRs — a chain by which Modular is already bringing
+decode/serving quantization onto the multistage skeleton. RULE: we do not touch
+anything that already has a PR.** Searched the open-PR list per issue (GitHub
+search matches title+body, so "none found" ≠ absolute):
 
+> **[modular#6668](https://github.com/modular/modular/pull/6668) (open)** —
+> "[Kernels][Pipelines] NVFP4 fallback for pre-Blackwell NVIDIA GPUs via **fused
+> dequant-GEMV**". A batch-1, bandwidth-bound decode GEMV ("per-token cost is
+> essentially reading the packed weights once") for **NVFP4**, on pre-Blackwell
+> (incl. sm_86).
+>
 > **[modular#6708](https://github.com/modular/modular/pull/6708) (open, DRAFT)** —
-> "[Kernels][GPU] NVFP4 GEMM on the multistage qGEMM skeleton". 36 files, +7278.
-> It reworks the same `multistage_mma_q` skeleton and **explicitly fixes the
-> `group_size < BK` case**: *"Fixed `num_scales_stages` for group < BK (was
-> counting groups, not packed stages → stale scale at group=16)"*, and validates
-> *"group=16 / group=32 match an E2M1 dequant reference"*.
+> "[Kernels][GPU] NVFP4 GEMM on the multistage qGEMM skeleton", builds on #6668.
+> Reworks `multistage_mma_q` and **fixes `group_size < BK`** (*"Fixed
+> num_scales_stages for group < BK … stale scale at group=16"*), validating
+> **group=32**.
 
-Implications, confirmed by reading the PR's changed files:
-- **Issue A (group_size < BK) is being fixed there** — for NVFP4, and it validates
-  **group=32**. So our A2 (generalize the kernel for group < BK) is largely being
-  done upstream. **Do not open a competing A2 PR.** Our remaining, non-overlapping
-  contribution on A: once #6708 lands, verify **GGUF Q4_0** (not just NVFP4/E2M1)
-  compiles and runs at o_proj/qkv on **sm_86**, and add a **Q4_0** regression test
-  — #6708 adds *no* tests under `quantization/`. If #6708 stalls (it is a draft),
-  the small A1 config-guard could ship as a standalone stopgap, but ping the #6708
-  author first.
-- **Issue B (unmasked A-tile load) is NOT touched by #6708** — its patch leaves
-  `a.tiled_iterator[BM, BK]` and the A→smem copy unchanged (verified). So our B fix
-  is still needed and **will not conflict** with #6708.
-- **#6708 targets serving GEMM (multi-request), not an M=1 decode GEMV**, so the
-  coverage gap C is unaffected.
+Per-issue PR status (verified 2026-09-03):
+
+| Issue | Open PR? | What we do |
+|---|---|---|
+| **A. Q4_0 g32 compile-fail** | **#6708** fixes group<BK, validates g32 (draft) | **Don't touch.** Only, once it lands: verify GGUF Q4_0 on sm_86 + add the Q4_0 test it lacks. |
+| **B. Unmasked A-tile load** | **None** (dedicated search) | **This is the one clean fix to actually do.** Not touched by #6668/#6708 (verified). |
+| **C. No M=1 decode-quant GEMV** | **#6668** does exactly this **for NVFP4** | **Don't build a competing GEMV.** The pattern is already upstream. Only verify whether Q4_0 rides it; if not, that wiring is the niche. |
+| **D. Attention seq-4096 gap** | **None** (and not a confirmed defect) | Just the paged-FlashInfer measurement to confirm/deny. |
+
+So under "don't duplicate a PR", the actionable work shrinks to: **B** (real fix),
+**D's measurement**, and **Q4_0-specific tests/verification** riding on the #6668/
+#6708 chain once it lands. A and C are *track-only*.
 
 ## Ground rules
 
@@ -145,23 +151,21 @@ cascade shapes that *do* have a decode config (up_proj/down_proj, BM=16) reach
 llama.cpp's `mul_mat_vec_q` is (73–100 %), and **our kernel matches it** (74–102 %,
 parity — see `reports/h0-results.md`).
 
-**Fix — route small-M quantized matmul to a dedicated GEMV.** Two paths:
-- **C1: dispatch existing work better.** Add an M=1 (small-M) branch to
-  `matmul_gpu_qint4_impl` that selects a GEMV-shaped kernel (one output row per
-  warp, weights streamed once) instead of a GEMM tile, for *all* N — closing the
-  gate_up/lm_head 15 % cliff. Depends on such a kernel existing upstream.
-- **C2: upstream our kernel.** `kernels/q4_0_gemv.mojo` is a Q8_1-activation +
-  `dp4a` decode GEMV at llama.cpp parity on sm_86. Contributing it (adapted to
-  MAX's packed-Q4_0 layout and dtype conventions, and generalized past M=1) gives
-  MAX a uniform decode path. This is the substantive H1 deliverable, not a quick
-  fix; it needs: the `dp4a` PTX helper (no stdlib dp4a on sm_86), the Q8_1
-  activation pre-pass, and a config/dispatch hook. Scope it as its own design doc +
-  PR series after A/B land.
+**Fix — DON'T build a competing kernel; [modular#6668](https://github.com/modular/modular/pull/6668)
+already adds a fused dequant-GEMV** for batch-1 on pre-Blackwell NVIDIA (incl.
+sm_86) — exactly this pattern, for **NVFP4**. So the M=1 decode-GEMV mechanism is
+already coming upstream. Our only non-duplicating question: **does GGUF Q4_0 ride
+that path, or only NVFP4?** Action = read #6668 to see if its dequant-GEMV is
+format-general or E2M1-only, and *measure* whether Q4_0 at gate_up/lm_head still
+falls to the 128×128 tile after #6668/#6708 land. If Q4_0 is left out, the niche is
+the **Q4_0 wiring into #6668's GEMV**, not a new kernel. Our `kernels/q4_0_gemv.mojo`
+(Q8_1 + `dp4a`, llama.cpp parity) then serves as a reference/benchmark for that
+wiring, not as a competing upstream kernel.
 
-**Caveat.** Our kernel is at *parity* with llama.cpp, not faster — the value to
-MAX is **uniform coverage** (no 15 % shapes, runs the g32 shapes A fixes) at the
-best-CUDA-baseline level, plus it is a decode kernel MAX currently lacks. Do not
-oversell it as "faster than the baseline".
+**Caveat.** Our kernel is at *parity* with llama.cpp, not faster — and the decode-
+GEMV pattern is already being upstreamed for NVFP4. So there is **no "write our own
+kernel and upstream it" story left** unless Q4_0 turns out to be excluded from the
+#6668 path; the honest contribution is coverage verification + Q4_0 wiring + tests.
 
 **Test.** Extend `benchmarks/gpu/linalg` with the six Llama-3 Q4_0 decode shapes
 at M=1 and gate a roofline-% regression check.
@@ -191,20 +195,21 @@ Logged in `reports/open-questions.md`.
 
 ---
 
-## Sequencing
+## Sequencing (after removing everything that already has a PR)
 
-0. **Track [modular#6708](https://github.com/modular/modular/pull/6708)** — it
-   already fixes group < BK (issue A) for group=32. Don't duplicate A2. When it
-   lands, verify Q4_0 g32 on sm_86 and PR a **Q4_0 regression test** (it adds none).
-1. **B** (A-tile mask) — small, obvious correctness fix, NOT covered by #6708,
-   no conflict; land it standalone with an ASAN / guard-page test.
-2. **D-prerequisite** (paged FlashInfer) — cheap measurement that decides whether
-   there is an attention fix at all.
-3. **A1** config-guard — only if #6708 stalls, as a compile stopgap.
-4. **C** (decode-quant GEMV) — the big one; its own design doc + PR series; this is
-   what H1 becomes if we go the "write and upstream a kernel" route. #6708 improves
-   the serving GEMM but leaves the M=1 decode cliff (gate_up/lm_head ~15 %) open.
+The "don't touch anything with a PR" rule leaves only three things that are ours:
 
-Items 0–2 are days; 4 is the real project. The H0 audit's job was to decide this
-ordering from evidence — including checking that we are not about to reinvent an
-open PR — and it has.
+1. **B — mask the A-tile load.** The single clean fix with no competing PR. Land
+   standalone (separate modular clone → PR) with an ASAN / guard-page test.
+2. **D-prerequisite — paged FlashInfer measurement.** Confirms or kills the
+   attention gap before anyone proposes an attention change. Cheap; reuses
+   `.venv-attn`.
+3. **Track #6668 + #6708; when they land, verify Q4_0 on sm_86** — does g32 now
+   compile, and does Q4_0 ride the fused dequant-GEMV or still hit the 128×128
+   tile? Add the **Q4_0 tests** the PRs don't. Only if Q4_0 is excluded does any
+   Q4_0-wiring work open up.
+
+Everything else (the group<BK generalization, the decode-GEMV kernel itself) is
+already in flight upstream as the #6668→#6708 chain — **we do not reimplement it.**
+The H0 audit's job was to decide this from evidence, including checking open PRs
+first, and it has: the net new work is one bug fix (B) and one measurement (D).
