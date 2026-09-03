@@ -153,10 +153,19 @@ def per_invocation_us(rows: list[dict]) -> dict:
     avg = sum(k["avg_ns"] for k in per_op) / 1000.0
     med = sum(k["med_ns"] for k in per_op) / 1000.0
     mn = sum(k["min_ns"] for k in per_op) / 1000.0
+    mx = sum(k["max_ns"] for k in per_op) / 1000.0
+    # Keep nsys's own per-kernel distribution (min/med/avg/max/stddev over the
+    # ~N timed invocations of THIS run) so the numbers are auditable from the
+    # committed JSON, not just a single collapsed median.
     return {
-        "avg_us": round(avg, 4), "med_us": round(med, 4), "min_us": round(mn, 4),
+        "avg_us": round(avg, 4), "med_us": round(med, 4),
+        "min_us": round(mn, 4), "max_us": round(mx, 4),
         "kernels": [{"name": k["name"], "instances": k["instances"],
-                     "avg_us": round(k["avg_ns"] / 1000.0, 4)} for k in per_op],
+                     "avg_us": round(k["avg_ns"] / 1000.0, 4),
+                     "med_us": round(k["med_ns"] / 1000.0, 4),
+                     "min_us": round(k["min_ns"] / 1000.0, 4),
+                     "max_us": round(k["max_ns"] / 1000.0, 4),
+                     "stddev_us": round(k["stddev_ns"] / 1000.0, 4)} for k in per_op],
         "excluded": [{"name": k["name"], "instances": k["instances"],
                       "avg_us": round(k["avg_ns"] / 1000.0, 4)} for k in setup],
         "warning": warn,

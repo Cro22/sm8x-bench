@@ -45,17 +45,21 @@
 # warps. Tuned per shape in the harness dispatch (bench/mojo/q4_0_gemv_ours.mojo):
 # small/mid N want RPW=4; the two near-roofline giants want RPW=2, RPB=2.
 #
-# Measured (sm_86 RTX 3090, locked 1695 MHz, nsys, incl. the quantize pass), M=1,
-# per-shape tuned RPW/RPB. "% spec" of the 936 GB/s spec bandwidth; llama.cpp's
-# mul_mat_vec_q on the same weights shown for reference (median over runs):
-#   shape       ours %spec   llama %spec   (RPW1 baseline -> tuned)
-#   o_proj        71.1          71.2       (62 -> 71)   tie; quantize-launch bound
-#   qkv_fused     78.5          77.4       (66 -> 79)   beats llama
-#   up_proj       87.0          84.6       (81 -> 87)   beats llama
-#   down_proj     87.3          89.1       (66 -> 87)   long-K; -1.8, near parity
-#   gate_up       94.3          93.5       (88 -> 94)   beats llama
-#   lm_head       99.0          95.6       (91 -> 99)   beats llama
-# The residual o_proj/down_proj gap is the fixed ~2 us quantize-pass launch (same
+# Measured (sm_86 RTX 3090, graphics clock 1695 MHz, nsys, incl. the quantize
+# pass), M=1, per-shape tuned RPW/RPB. ours and llama.cpp mul_mat_vec_q on the SAME
+# weights, measured SAME-SESSION, 3 passes each (least-contended min-pass %spec;
+# the graphics-clock lock does not lock the GDDR6X memory clock so the run-to-run
+# band is 0-9% and per-shape gaps <~5% are noise):
+#   shape       ours min%   llama min%   verdict
+#   o_proj        74.5        72.7        tie
+#   qkv_fused     82.5        83.8        tie
+#   up_proj       88.1        88.4        tie
+#   down_proj     92.0        94.7        tie
+#   gate_up       91.8       100.1        llama.cpp faster
+#   lm_head      101.9       101.5        tie
+# => PARITY with llama.cpp (no robust win for ours); the real win is vs MAX, which
+# compile-fails o_proj/qkv (g32) and falls to a 15% GEMM tile on gate_up/lm_head.
+# The o_proj/down_proj residual is the fixed ~2 us quantize-pass launch (same
 # two-kernel structure llama.cpp uses); folding it into the GEMV was measured
 # ~2x SLOWER (register-serial per-lane quantize doesn't hide), so it stays split.
 # ===----------------------------------------------------------------------=== #

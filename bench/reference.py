@@ -93,6 +93,29 @@ def _ggml_quantize(W_src: np.ndarray, fmt: str, N: int, K: int) -> np.ndarray:
         return np.fromfile(fout, dtype=np.uint8)
 
 
+def hash_inputs(paths: dict) -> dict:
+    """sha256 + byte count of each raw input file the run reads (W, x, ref, ...),
+    for input provenance in the results JSON. The input .bin files are gitignored
+    (multi-GB), so this lets a historical result be checked to have used exactly
+    these bytes. Only path-valued keys are hashed."""
+    out = {}
+    for k, v in paths.items():
+        p = Path(v) if not isinstance(v, Path) else v
+        try:
+            if not p.exists() or not p.is_file():
+                continue
+        except (OSError, TypeError):
+            continue
+        h = hashlib.sha256()
+        n = 0
+        with open(p, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+                n += len(chunk)
+        out[k] = {"file": p.name, "sha256": h.hexdigest(), "bytes": n}
+    return out
+
+
 def gen_gemv(name: str, N: int, K: int, fmt: str, M: int = 1) -> None:
     """Write W (N x K, `fmt`), x (M x K, activation dtype for `fmt`), and the
     fp32 reference y (M x N). The reference is computed from the EXACT bytes the

@@ -38,6 +38,9 @@ def main() -> int:
     ap.add_argument("--shape", default="o_proj")
     ap.add_argument("--M", type=int, default=1)
     ap.add_argument("--fmt", default="Q4_0", choices=["Q4_0", "Q8_0", "Q4_K"])
+    ap.add_argument("--passes", type=int, default=3,
+                    help="independent nsys runs; median run reported, all "
+                         "pass medians preserved in timing.passes")
     ap.add_argument("--locked-clock", type=int, default=None)
     ap.add_argument("--measured-gbps", type=float, default=None)
     ap.add_argument("--gpu-index", type=int, default=0)
@@ -63,43 +66,52 @@ def main() -> int:
     # following into the driver).
     cmd = [str(DRIVER), str(N), str(K), str(M),
            str(p["W"]), str(p["x"]), str(p["ref"]), args.fmt]
-    print(f"profiling under nsys: llama.cpp {args.shape} {args.fmt} M{M} ...")
-    rows = nsys.kernel_summary(cmd, cwd=_REPO,
-                               env={"GGML_CUDA_DISABLE_GRAPHS": "1"})
-    meta = rows[0]
-    out = meta.get("__stdout__", "")
-    if meta.get("__returncode__", 1) != 0:
-        print(out); print("ABORT: driver exited non-zero.", file=sys.stderr); return 1
 
-    cm = _CORR.search(out)
-    if not cm:
-        print(out); print("ABORT: no correctness line.", file=sys.stderr); return 1
-    if cm[1] != "PASS":
-        print("ABORT: correctness FAILED.", file=sys.stderr); return 1
-    l2_rel, max_abs, max_rel = float(cm[2]), float(cm[3]), float(cm[4])
+    l2_rel = max_abs = max_rel = None
+    passes = []
+    for pi in range(args.passes):
+        print(f"profiling under nsys: llama.cpp {args.shape} {args.fmt} M{M} "
+              f"(pass {pi+1}/{args.passes}) ...")
+        rows = nsys.kernel_summary(cmd, cwd=_REPO,
+                                   env={"GGML_CUDA_DISABLE_GRAPHS": "1"})
+        meta = rows[0]
+        out = meta.get("__stdout__", "")
+        if meta.get("__returncode__", 1) != 0:
+            print(out); print("ABORT: driver exited non-zero.", file=sys.stderr); return 1
+        cm = _CORR.search(out)
+        if not cm:
+            print(out); print("ABORT: no correctness line.", file=sys.stderr); return 1
+        if cm[1] != "PASS":
+            print("ABORT: correctness FAILED.", file=sys.stderr); return 1
+        l2_rel, max_abs, max_rel = float(cm[2]), float(cm[3]), float(cm[4])
+        kt = nsys.per_invocation_us(rows)
+        if kt["med_us"] is None:
+            print("ABORT: nsys found no GPU kernels.", file=sys.stderr); return 1
+        wall = [float(v) for v in (_SAMPLES.search(out)[1].replace(" ", "").split(",")
+                                   if _SAMPLES.search(out) else []) if v]
+        passes.append({
+            "median_us": kt["med_us"], "min_us": kt["min_us"],
+            "max_us": kt.get("max_us"), "nsys_mean_us": kt["avg_us"],
+            "n_instances": sum(k["instances"] for k in kt["kernels"]),
+            "kernels": kt["kernels"], "warning": kt["warning"],
+            "observed_sm_clock": meta.get("__sm_clock_mhz__"),
+            "wall_samples_us": [round(v, 3) for v in wall],
+        })
 
-    kt = nsys.per_invocation_us(rows)
-    if kt["med_us"] is None:
-        print("ABORT: nsys found no GPU kernels.", file=sys.stderr); return 1
+    pass_meds = sorted(pr["median_us"] for pr in passes)
+    median_us = pass_meds[len(pass_meds) // 2]
+    rep = min(passes, key=lambda pr: abs(pr["median_us"] - median_us))
+    spread_pct = round(100 * (pass_meds[-1] - pass_meds[0]) / median_us, 2)
 
-    wall_median = None
-    sm = _SAMPLES.search(out)
-    if sm:
-        s = [float(v) for v in sm[1].replace(" ", "").split(",") if v]
-        if s:
-            wall_median = round(st.median(s), 3)
-
-    median_us = kt["med_us"]
     bytes_moved = roofline.gemv_bytes(M, N, K, args.fmt)
     flops = roofline.gemv_flops(M, N, K)
-    kernel_names = ", ".join(k["name"] for k in kt["kernels"])
-
+    kernel_names = ", ".join(k["name"] for k in rep["kernels"])
     note = (f"llama.cpp {args.fmt}; nsys kernel(s): {kernel_names}. "
-            f"f32 activations; identical {args.fmt} weight bytes. ")
-    if kt["warning"]:
-        note += "WARN " + kt["warning"] + ". "
-    if wall_median is not None:
-        note += f"harness wall-clock median {wall_median} us. "
+            f"f32 activations; identical {args.fmt} weight bytes. "
+            f"median of {args.passes} passes {pass_meds} us (spread {spread_pct}%); "
+            f"all preserved in timing.passes. ")
+    if rep["warning"]:
+        note += "WARN " + rep["warning"] + ". "
 
     path = write_result(
         impl="llamacpp",
@@ -111,30 +123,34 @@ def main() -> int:
         flops=flops,
         timing={
             "source": "nsys_gpukernsum",
-            "n_instances": sum(k["instances"] for k in kt["kernels"]),
+            "n_instances": rep["n_instances"],
             "launches_per_sample": 0,
-            "median_us": median_us, "q1_us": 0, "q3_us": 0,
-            "min_us": kt["min_us"], "p95_us": 0,
-            "nsys_mean_us": kt["avg_us"],
-            "harness_wallclock_median_us": wall_median,
-            "kernels": kt["kernels"],
+            "median_us": median_us, "min_us": rep["min_us"],
+            "nsys_mean_us": rep["nsys_mean_us"],
+            "passes": args.passes, "pass_medians_us": pass_meds,
+            "pass_spread_pct": spread_pct, "pass_detail": passes,
+            "harness_wallclock_median_us": (
+                round(st.median(rep["wall_samples_us"]), 3)
+                if rep["wall_samples_us"] else None),
+            "kernels": rep["kernels"],
         },
         correctness={"validated": True, "l2_rel_err": l2_rel,
                      "max_abs_err": max_abs, "max_rel_err": max_rel,
                      "tolerance": "l2_rel<3e-2 (vs our fp32 dequant ref)"},
         graphics_clock_mhz_locked=args.locked_clock,
         mem_clock_locked=False,
-        observed_sm_clock=meta.get("__sm_clock_mhz__"),
+        observed_sm_clock=rep["observed_sm_clock"],
         measured_gbps=args.measured_gbps,
         llamacpp_sha=llamacpp_sha,
+        inputs=reference.hash_inputs(p),
         notes=note,
         gpu_index=args.gpu_index,
     )
     print(f"wrote {path}")
     ag = roofline.achieved_gbps(bytes_moved, median_us)
-    print(f"nsys kernel median={median_us:.2f} us  achieved={ag:.1f} GB/s  "
-          f"pct_spec={100*ag/roofline.spec_bandwidth_gbps('sm_86'):.1f}%"
-          + (f"  pct_measured={100*ag/args.measured_gbps:.1f}%" if args.measured_gbps else ""))
+    print(f"median-of-{args.passes} kernel={median_us:.2f} us  achieved={ag:.1f} GB/s  "
+          f"pct_spec={100*ag/roofline.spec_bandwidth_gbps('sm_86'):.1f}%  "
+          f"passes={pass_meds} spread={spread_pct}%")
     return 0
 
 

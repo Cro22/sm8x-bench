@@ -1,0 +1,264 @@
+{
+  "schema": 1,
+  "impl": "ours",
+  "kernel": "gemv",
+  "variant": "Q4_0_M1_o_proj",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 3090",
+    "arch": "sm_86",
+    "compute_capability": "8.6",
+    "sms": 82,
+    "driver": "610.62",
+    "cuda_driver_version": "13.3",
+    "graphics_clock_mhz_current": 1695,
+    "graphics_clock_mhz_max": 2100,
+    "graphics_clock_mhz_locked": 1695,
+    "mem_clock_mhz": 9951,
+    "mem_clock_mhz_max": 9751,
+    "mem_clock_locked": false,
+    "power_limit_w": 420.0,
+    "graphics_clock_mhz_observed": {
+      "min": 1695,
+      "max": 1695,
+      "median": 1695,
+      "n": 65
+    }
+  },
+  "shape": {
+    "M": 1,
+    "N": 4096,
+    "K": 4096
+  },
+  "dtype": {
+    "weights": "Q4_0",
+    "activations": "bf16",
+    "accum": "fp32"
+  },
+  "bytes_moved": 9453568,
+  "flops": 33554432,
+  "timing": {
+    "source": "nsys_gpukernsum",
+    "n_instances": 262,
+    "launches_per_sample": 0,
+    "median_us": 13.69,
+    "min_us": 13.127,
+    "nsys_mean_us": 13.7391,
+    "passes": 3,
+    "pass_medians_us": [
+      13.552,
+      13.69,
+      14.784
+    ],
+    "pass_spread_pct": 9.0,
+    "pass_detail": [
+      {
+        "median_us": 13.69,
+        "min_us": 13.127,
+        "max_us": 15.766,
+        "nsys_mean_us": 13.7391,
+        "n_instances": 262,
+        "kernels": [
+          {
+            "name": "q4_0_gemv_q4_0_gemv_kernel_SI6A6AcB6A6A_d518d085033f0190",
+            "instances": 131,
+            "avg_us": 11.855,
+            "med_us": 11.794,
+            "min_us": 11.557,
+            "max_us": 13.78,
+            "stddev_us": 0.3389
+          },
+          {
+            "name": "q4_0_gemv_quantize_x_q8_1_SIM6A6AcB6A6A_cc3af2d569ecc85a",
+            "instances": 131,
+            "avg_us": 1.8841,
+            "med_us": 1.896,
+            "min_us": 1.57,
+            "max_us": 1.986,
+            "stddev_us": 0.0489
+          }
+        ],
+        "warning": "",
+        "observed_sm_clock": {
+          "min": 1695,
+          "max": 1695,
+          "median": 1695,
+          "n": 65
+        },
+        "wall_samples_us": [
+          18.486,
+          18.419,
+          18.361,
+          18.361,
+          20.579,
+          18.397,
+          18.406,
+          19.273,
+          20.56,
+          23.286,
+          19.443,
+          21.497
+        ]
+      },
+      {
+        "median_us": 13.552,
+        "min_us": 13.054,
+        "max_us": 15.516,
+        "nsys_mean_us": 13.5742,
+        "n_instances": 262,
+        "kernels": [
+          {
+            "name": "q4_0_gemv_q4_0_gemv_kernel_SI6A6AcB6A6A_d518d085033f0190",
+            "instances": 131,
+            "avg_us": 11.7099,
+            "med_us": 11.675,
+            "min_us": 11.411,
+            "max_us": 13.522,
+            "stddev_us": 0.2157
+          },
+          {
+            "name": "q4_0_gemv_quantize_x_q8_1_SIM6A6AcB6A6A_cc3af2d569ecc85a",
+            "instances": 131,
+            "avg_us": 1.8643,
+            "med_us": 1.877,
+            "min_us": 1.643,
+            "max_us": 1.994,
+            "stddev_us": 0.0359
+          }
+        ],
+        "warning": "",
+        "observed_sm_clock": {
+          "min": 1695,
+          "max": 1695,
+          "median": 1695,
+          "n": 61
+        },
+        "wall_samples_us": [
+          35.462,
+          28.416,
+          35.363,
+          32.794,
+          34.685,
+          35.939,
+          34.701,
+          30.947,
+          26.064,
+          32.723,
+          35.107,
+          31.581
+        ]
+      },
+      {
+        "median_us": 14.784,
+        "min_us": 14.304,
+        "max_us": 17.184,
+        "nsys_mean_us": 14.7929,
+        "n_instances": 262,
+        "kernels": [
+          {
+            "name": "q4_0_gemv_q4_0_gemv_kernel_SI6A6AcB6A6A_d518d085033f0190",
+            "instances": 131,
+            "avg_us": 12.7566,
+            "med_us": 12.736,
+            "min_us": 12.512,
+            "max_us": 15.008,
+            "stddev_us": 0.2338
+          },
+          {
+            "name": "q4_0_gemv_quantize_x_q8_1_SIM6A6AcB6A6A_cc3af2d569ecc85a",
+            "instances": 131,
+            "avg_us": 2.0363,
+            "med_us": 2.048,
+            "min_us": 1.792,
+            "max_us": 2.176,
+            "stddev_us": 0.0383
+          }
+        ],
+        "warning": "",
+        "observed_sm_clock": {
+          "min": 1695,
+          "max": 1695,
+          "median": 1695,
+          "n": 63
+        },
+        "wall_samples_us": [
+          18.493,
+          18.4,
+          18.406,
+          18.47,
+          18.458,
+          18.403,
+          20.595,
+          18.553,
+          18.429,
+          18.486,
+          28.246,
+          18.448
+        ]
+      }
+    ],
+    "harness_wallclock_median_us": 18.88,
+    "kernels": [
+      {
+        "name": "q4_0_gemv_q4_0_gemv_kernel_SI6A6AcB6A6A_d518d085033f0190",
+        "instances": 131,
+        "avg_us": 11.855,
+        "med_us": 11.794,
+        "min_us": 11.557,
+        "max_us": 13.78,
+        "stddev_us": 0.3389
+      },
+      {
+        "name": "q4_0_gemv_quantize_x_q8_1_SIM6A6AcB6A6A_cc3af2d569ecc85a",
+        "instances": 131,
+        "avg_us": 1.8841,
+        "med_us": 1.896,
+        "min_us": 1.57,
+        "max_us": 1.986,
+        "stddev_us": 0.0489
+      }
+    ]
+  },
+  "achieved_gbps": 690.55,
+  "achieved_tflops": 2.451,
+  "roofline": {
+    "spec_gbps": 936.0,
+    "measured_gbps": 816.3,
+    "pct_spec": 73.8,
+    "pct_measured": 84.6
+  },
+  "correctness": {
+    "validated": true,
+    "l2_rel_err": 0.005322592,
+    "max_abs_err": 1.385025,
+    "max_rel_err": 22.57647,
+    "tolerance": "l2_rel<3e-2 (vs fp32 dequant ref)"
+  },
+  "env": {
+    "mojo_version": "1.0.0",
+    "max_version": "26.5.0",
+    "modular_sha": "b4497b7ce9ba96331c72c637ad41b44bab374f33",
+    "cuda_version": "13.3",
+    "llamacpp_sha": "",
+    "flashinfer_version": "unknown",
+    "harness_sha": "6df2700355bed61d249ab6e14e00605c282f387a-dirty",
+    "timestamp_utc": "2026-09-03T00:16:32.062916+00:00"
+  },
+  "notes": "our Q4_0 GEMV; nsys kernel(s): q4_0_gemv_q4_0_gemv_kernel_SI6A6AcB6A6A_d518d085033f0190, q4_0_gemv_quantize_x_q8_1_SIM6A6AcB6A6A_cc3af2d569ecc85a. bf16 activations. median of 3 passes [13.552, 13.69, 14.784] us (spread 9.0%); all preserved in timing.passes. ",
+  "inputs": {
+    "W": {
+      "file": "gemv_o_proj_Q4_0_W.bin",
+      "sha256": "af43a2d7b397247f6b01c0bb8970b9bd2d689358c793e10974fb22784b354f34",
+      "bytes": 9437184
+    },
+    "x": {
+      "file": "gemv_o_proj_bf16_M1_x.bin",
+      "sha256": "e0a885a8815687c955626a3b70d62b091576ee24cc3f298066535f90641a1f17",
+      "bytes": 8192
+    },
+    "ref": {
+      "file": "gemv_o_proj_Q4_0_M1_ref.bin",
+      "sha256": "4c7388ae42348b78fe57b53c63532daeee1e0a00e1bfb3581e7a0078a6da6837",
+      "bytes": 16384
+    }
+  }
+}

@@ -81,6 +81,7 @@ def write_result(
     measured_gbps: float | None = None,
     llamacpp_sha: str = "",
     flashinfer_version: str = "",
+    inputs: dict | None = None,
     notes: str = "",
     gpu_index: int = 0,
 ) -> Path:
@@ -134,6 +135,11 @@ def write_result(
         "env": envblock,
         "notes": notes,
     }
+    # Input provenance: sha256 + byte count of every raw input the run consumed,
+    # so a historical result can be checked to have used exactly these bytes even
+    # though the multi-GB input files are gitignored.
+    if inputs is not None:
+        record["inputs"] = inputs
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     ts = envblock["timestamp_utc"].replace(":", "").replace("-", "").split(".")[0]

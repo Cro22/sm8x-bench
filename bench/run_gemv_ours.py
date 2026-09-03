@@ -47,10 +47,20 @@ def ensure_built() -> None:
         raise SystemExit("mojo build failed")
 
 
+def _wall_samples(out: str) -> list[float]:
+    sm = _SAMPLES.search(out)
+    if not sm:
+        return []
+    return [float(v) for v in sm[1].replace(" ", "").split(",") if v]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--shape", default="o_proj")
     ap.add_argument("--M", type=int, default=1)
+    ap.add_argument("--passes", type=int, default=3,
+                    help="independent nsys runs; the median run is reported and "
+                         "ALL pass medians are preserved in timing.passes")
     ap.add_argument("--locked-clock", type=int, default=None)
     ap.add_argument("--measured-gbps", type=float, default=None)
     ap.add_argument("--gpu-index", type=int, default=0)
@@ -66,39 +76,48 @@ def main() -> int:
     ensure_built()
     cmd = [str(BINARY), str(N), str(K), str(M),
            str(p["W"]), str(p["x"]), str(p["ref"]), "3e-2", "5e-3"]
-    print(f"profiling under nsys: ours {args.shape} Q4_0 M{M} ...")
-    rows = nsys.kernel_summary(cmd, cwd=_REPO)
-    meta = rows[0]
-    out = meta.get("__stdout__", "")
-    if meta.get("__returncode__", 1) != 0:
-        print(out); print("ABORT: entry exited non-zero.", file=sys.stderr); return 1
-    cm = _CORR.search(out)
-    if not cm:
-        print(out); print("ABORT: no correctness line.", file=sys.stderr); return 1
-    if cm[1] != "PASS":
-        print("ABORT: correctness FAILED.", file=sys.stderr); return 1
-    l2_rel, max_abs, max_rel = float(cm[2]), float(cm[3]), float(cm[4])
 
-    kt = nsys.per_invocation_us(rows)
-    if kt["med_us"] is None:
-        print("ABORT: nsys found no GPU kernels.", file=sys.stderr); return 1
+    l2_rel = max_abs = max_rel = None
+    passes = []          # one entry per independent nsys run
+    for pi in range(args.passes):
+        print(f"profiling under nsys: ours {args.shape} Q4_0 M{M} "
+              f"(pass {pi+1}/{args.passes}) ...")
+        rows = nsys.kernel_summary(cmd, cwd=_REPO)
+        meta = rows[0]
+        out = meta.get("__stdout__", "")
+        if meta.get("__returncode__", 1) != 0:
+            print(out); print("ABORT: entry exited non-zero.", file=sys.stderr); return 1
+        cm = _CORR.search(out)
+        if not cm:
+            print(out); print("ABORT: no correctness line.", file=sys.stderr); return 1
+        if cm[1] != "PASS":
+            print("ABORT: correctness FAILED.", file=sys.stderr); return 1
+        l2_rel, max_abs, max_rel = float(cm[2]), float(cm[3]), float(cm[4])
+        kt = nsys.per_invocation_us(rows)
+        if kt["med_us"] is None:
+            print("ABORT: nsys found no GPU kernels.", file=sys.stderr); return 1
+        passes.append({
+            "median_us": kt["med_us"], "min_us": kt["min_us"],
+            "max_us": kt.get("max_us"), "nsys_mean_us": kt["avg_us"],
+            "n_instances": sum(k["instances"] for k in kt["kernels"]),
+            "kernels": kt["kernels"], "warning": kt["warning"],
+            "observed_sm_clock": meta.get("__sm_clock_mhz__"),
+            "wall_samples_us": [round(v, 3) for v in _wall_samples(out)],
+        })
 
-    wall_median = None
-    sm = _SAMPLES.search(out)
-    if sm:
-        s = [float(v) for v in sm[1].replace(" ", "").split(",") if v]
-        if s:
-            wall_median = round(st.median(s), 3)
+    pass_meds = sorted(pr["median_us"] for pr in passes)
+    median_us = pass_meds[len(pass_meds) // 2]        # median run
+    rep = min(passes, key=lambda pr: abs(pr["median_us"] - median_us))
+    spread_pct = round(100 * (pass_meds[-1] - pass_meds[0]) / median_us, 2)
 
-    median_us = kt["med_us"]
     bytes_moved = roofline.gemv_bytes(M, N, K, "Q4_0")
     flops = roofline.gemv_flops(M, N, K)
-    kernel_names = ", ".join(k["name"] for k in kt["kernels"])
-    note = f"our Q4_0 GEMV; nsys kernel(s): {kernel_names}. bf16 activations. "
-    if kt["warning"]:
-        note += "WARN " + kt["warning"] + ". "
-    if wall_median is not None:
-        note += f"harness wall-clock median {wall_median} us. "
+    kernel_names = ", ".join(k["name"] for k in rep["kernels"])
+    note = (f"our Q4_0 GEMV; nsys kernel(s): {kernel_names}. bf16 activations. "
+            f"median of {args.passes} passes {pass_meds} us "
+            f"(spread {spread_pct}%); all preserved in timing.passes. ")
+    if rep["warning"]:
+        note += "WARN " + rep["warning"] + ". "
 
     path = write_result(
         impl="ours", kernel="gemv", variant=f"Q4_0_M{M}_{args.shape}",
@@ -106,24 +125,30 @@ def main() -> int:
         dtype={"weights": "Q4_0", "activations": "bf16", "accum": "fp32"},
         bytes_moved=bytes_moved, flops=flops,
         timing={"source": "nsys_gpukernsum",
-                "n_instances": sum(k["instances"] for k in kt["kernels"]),
+                "n_instances": rep["n_instances"],
                 "launches_per_sample": 0, "median_us": median_us,
-                "q1_us": 0, "q3_us": 0, "min_us": kt["min_us"], "p95_us": 0,
-                "nsys_mean_us": kt["avg_us"],
-                "harness_wallclock_median_us": wall_median,
-                "kernels": kt["kernels"]},
+                "min_us": rep["min_us"], "nsys_mean_us": rep["nsys_mean_us"],
+                "passes": args.passes, "pass_medians_us": pass_meds,
+                "pass_spread_pct": spread_pct,
+                "pass_detail": passes,
+                "harness_wallclock_median_us": (
+                    round(st.median(rep["wall_samples_us"]), 3)
+                    if rep["wall_samples_us"] else None),
+                "kernels": rep["kernels"]},
         correctness={"validated": True, "l2_rel_err": l2_rel,
                      "max_abs_err": max_abs, "max_rel_err": max_rel,
                      "tolerance": "l2_rel<3e-2 (vs fp32 dequant ref)"},
         graphics_clock_mhz_locked=args.locked_clock, mem_clock_locked=False,
-        observed_sm_clock=meta.get("__sm_clock_mhz__"),
-        measured_gbps=args.measured_gbps, notes=note, gpu_index=args.gpu_index,
+        observed_sm_clock=rep["observed_sm_clock"],
+        measured_gbps=args.measured_gbps,
+        inputs=reference.hash_inputs(p),
+        notes=note, gpu_index=args.gpu_index,
     )
     print(f"wrote {path}")
     ag = roofline.achieved_gbps(bytes_moved, median_us)
-    print(f"nsys kernel median={median_us:.2f} us  achieved={ag:.1f} GB/s  "
-          f"pct_spec={100*ag/roofline.spec_bandwidth_gbps('sm_86'):.1f}%"
-          + (f"  pct_measured={100*ag/args.measured_gbps:.1f}%" if args.measured_gbps else ""))
+    print(f"median-of-{args.passes} kernel={median_us:.2f} us  achieved={ag:.1f} GB/s  "
+          f"pct_spec={100*ag/roofline.spec_bandwidth_gbps('sm_86'):.1f}%  "
+          f"passes={pass_meds} spread={spread_pct}%")
     return 0
 
 

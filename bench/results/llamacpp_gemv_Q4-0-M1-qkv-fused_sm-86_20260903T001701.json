@@ -1,0 +1,264 @@
+{
+  "schema": 1,
+  "impl": "llamacpp",
+  "kernel": "gemv",
+  "variant": "Q4_0_M1_qkv_fused",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 3090",
+    "arch": "sm_86",
+    "compute_capability": "8.6",
+    "sms": 82,
+    "driver": "610.62",
+    "cuda_driver_version": "13.3",
+    "graphics_clock_mhz_current": 1695,
+    "graphics_clock_mhz_max": 2100,
+    "graphics_clock_mhz_locked": 1695,
+    "mem_clock_mhz": 9951,
+    "mem_clock_mhz_max": 9751,
+    "mem_clock_locked": false,
+    "power_limit_w": 420.0,
+    "graphics_clock_mhz_observed": {
+      "min": 1695,
+      "max": 1695,
+      "median": 1695,
+      "n": 42
+    }
+  },
+  "shape": {
+    "M": 1,
+    "N": 6144,
+    "K": 4096
+  },
+  "dtype": {
+    "weights": "Q4_0",
+    "activations": "fp32",
+    "accum": "fp32"
+  },
+  "bytes_moved": 14176256,
+  "flops": 50331648,
+  "timing": {
+    "source": "nsys_gpukernsum",
+    "n_instances": 262,
+    "launches_per_sample": 0,
+    "median_us": 18.098,
+    "min_us": 17.746,
+    "nsys_mean_us": 18.1294,
+    "passes": 3,
+    "pass_medians_us": [
+      18.069,
+      18.098,
+      18.127
+    ],
+    "pass_spread_pct": 0.32,
+    "pass_detail": [
+      {
+        "median_us": 18.069,
+        "min_us": 17.952,
+        "max_us": 19.39,
+        "nsys_mean_us": 18.1325,
+        "n_instances": 262,
+        "kernels": [
+          {
+            "name": "void mul_mat_vec_q<(ggml_type)2, (int)1, (bool)0, (bool)0, (bool)0>(const void *, const void *, con\u2026",
+            "instances": 131,
+            "avg_us": 16.2899,
+            "med_us": 16.25,
+            "min_us": 16.162,
+            "max_us": 16.838,
+            "stddev_us": 0.1474
+          },
+          {
+            "name": "quantize_q8_1(const float *, void *, long, long, long, long, long, unsigned int, uint3)",
+            "instances": 131,
+            "avg_us": 1.8426,
+            "med_us": 1.819,
+            "min_us": 1.79,
+            "max_us": 2.552,
+            "stddev_us": 0.0674
+          }
+        ],
+        "warning": "",
+        "observed_sm_clock": {
+          "min": 1695,
+          "max": 1695,
+          "median": 1695,
+          "n": 49
+        },
+        "wall_samples_us": [
+          49.085,
+          48.422,
+          47.565,
+          51.184,
+          48.637,
+          48.621,
+          48.502,
+          48.208,
+          48.25,
+          48.051,
+          47.446,
+          50.474
+        ]
+      },
+      {
+        "median_us": 18.098,
+        "min_us": 17.746,
+        "max_us": 22.497,
+        "nsys_mean_us": 18.1294,
+        "n_instances": 262,
+        "kernels": [
+          {
+            "name": "void mul_mat_vec_q<(ggml_type)2, (int)1, (bool)0, (bool)0, (bool)0>(const void *, const void *, con\u2026",
+            "instances": 131,
+            "avg_us": 16.2731,
+            "med_us": 16.25,
+            "min_us": 16.162,
+            "max_us": 19.066,
+            "stddev_us": 0.2531
+          },
+          {
+            "name": "quantize_q8_1(const float *, void *, long, long, long, long, long, unsigned int, uint3)",
+            "instances": 131,
+            "avg_us": 1.8563,
+            "med_us": 1.848,
+            "min_us": 1.584,
+            "max_us": 3.431,
+            "stddev_us": 0.1519
+          }
+        ],
+        "warning": "",
+        "observed_sm_clock": {
+          "min": 1695,
+          "max": 1695,
+          "median": 1695,
+          "n": 42
+        },
+        "wall_samples_us": [
+          48.554,
+          51.296,
+          48.003,
+          49.626,
+          58.672,
+          106.058,
+          51.13,
+          48.077,
+          48.906,
+          52.704,
+          47.904,
+          48.522
+        ]
+      },
+      {
+        "median_us": 18.127,
+        "min_us": 17.863,
+        "max_us": 22.734,
+        "nsys_mean_us": 18.2567,
+        "n_instances": 262,
+        "kernels": [
+          {
+            "name": "void mul_mat_vec_q<(ggml_type)2, (int)1, (bool)0, (bool)0, (bool)0>(const void *, const void *, con\u2026",
+            "instances": 131,
+            "avg_us": 16.3969,
+            "med_us": 16.279,
+            "min_us": 16.162,
+            "max_us": 19.272,
+            "stddev_us": 0.4453
+          },
+          {
+            "name": "quantize_q8_1(const float *, void *, long, long, long, long, long, unsigned int, uint3)",
+            "instances": 131,
+            "avg_us": 1.8598,
+            "med_us": 1.848,
+            "min_us": 1.701,
+            "max_us": 3.462,
+            "stddev_us": 0.1562
+          }
+        ],
+        "warning": "",
+        "observed_sm_clock": {
+          "min": 1695,
+          "max": 1695,
+          "median": 1695,
+          "n": 48
+        },
+        "wall_samples_us": [
+          71.501,
+          70.989,
+          71.43,
+          73.398,
+          129.002,
+          93.091,
+          60.202,
+          52.749,
+          59.19,
+          53.472,
+          54.749,
+          56.355
+        ]
+      }
+    ],
+    "harness_wallclock_median_us": 49.266,
+    "kernels": [
+      {
+        "name": "void mul_mat_vec_q<(ggml_type)2, (int)1, (bool)0, (bool)0, (bool)0>(const void *, const void *, con\u2026",
+        "instances": 131,
+        "avg_us": 16.2731,
+        "med_us": 16.25,
+        "min_us": 16.162,
+        "max_us": 19.066,
+        "stddev_us": 0.2531
+      },
+      {
+        "name": "quantize_q8_1(const float *, void *, long, long, long, long, long, unsigned int, uint3)",
+        "instances": 131,
+        "avg_us": 1.8563,
+        "med_us": 1.848,
+        "min_us": 1.584,
+        "max_us": 3.431,
+        "stddev_us": 0.1519
+      }
+    ]
+  },
+  "achieved_gbps": 783.31,
+  "achieved_tflops": 2.781,
+  "roofline": {
+    "spec_gbps": 936.0,
+    "measured_gbps": 816.3,
+    "pct_spec": 83.7,
+    "pct_measured": 96.0
+  },
+  "correctness": {
+    "validated": true,
+    "l2_rel_err": 0.0124832,
+    "max_abs_err": 2.78004,
+    "max_rel_err": 472.091,
+    "tolerance": "l2_rel<3e-2 (vs our fp32 dequant ref)"
+  },
+  "env": {
+    "mojo_version": "1.0.0",
+    "max_version": "26.5.0",
+    "modular_sha": "b4497b7ce9ba96331c72c637ad41b44bab374f33",
+    "cuda_version": "13.3",
+    "llamacpp_sha": "3466812d1f06728effe7c0f3c0671117f461672d",
+    "flashinfer_version": "unknown",
+    "harness_sha": "6df2700355bed61d249ab6e14e00605c282f387a-dirty",
+    "timestamp_utc": "2026-09-03T00:17:01.985407+00:00"
+  },
+  "notes": "llama.cpp Q4_0; nsys kernel(s): void mul_mat_vec_q<(ggml_type)2, (int)1, (bool)0, (bool)0, (bool)0>(const void *, const void *, con\u2026, quantize_q8_1(const float *, void *, long, long, long, long, long, unsigned int, uint3). f32 activations; identical Q4_0 weight bytes. median of 3 passes [18.069, 18.098, 18.127] us (spread 0.32%); all preserved in timing.passes. ",
+  "inputs": {
+    "W": {
+      "file": "gemv_qkv_fused_Q4_0_W.bin",
+      "sha256": "cfd601f3d144212beadcb3a0822b268f1991a728e14653f3741f48fc8ea9fdeb",
+      "bytes": 14155776
+    },
+    "x": {
+      "file": "gemv_qkv_fused_bf16_M1_x.bin",
+      "sha256": "825863d3b77edf5c6dd7636b24ed9ad71949cd977b439d3fb44bd98563e5a819",
+      "bytes": 8192
+    },
+    "ref": {
+      "file": "gemv_qkv_fused_Q4_0_M1_ref.bin",
+      "sha256": "792c1690107c74f73cbdb9c59ce10fb9773dda4d1249a779a33a5cde522952db",
+      "bytes": 24576
+    }
+  }
+}
