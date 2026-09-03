@@ -40,6 +40,11 @@ Drafts only. Never posted by Claude Code.
    M=1-specialized config — decode-shape Q4_0 runs a 128x128 GEMM tile at ~6% of
    the memory roofline (~4x slower than the fp16 GEMV). Repro shape + measurement
    in bench/results; details in reports/api-drift.md.
+   **UPDATE 2026-09-03:** open PR modular#6708 (draft, "NVFP4 GEMM on the multistage
+   qGEMM skeleton") fixes the group < BK scale handling and validates group=32, so
+   this may be resolved upstream soon — do NOT file a duplicate. It adds no Q4_0
+   test and does not touch the unmasked A-tile load (a separate latent bug). See
+   reports/max-fixes-plan.md.
 
 ## Internal (methodology, not for forum)
 
