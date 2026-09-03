@@ -138,6 +138,9 @@ selects a `BM > M` config at large K).
 correct output.
 
 **Upstream framing.** `[Kernel][GPU] multistage_mma_q: mask A-tile load for M < BM`.
+**PR/issue-ready writeup with the exact fix (dense-path `_mask_tensor_row` pattern),
+verified line numbers, and the test: [`reports/max-B-fix.md`](max-B-fix.md).**
+Not built/tested here (no MAX bazel env); must be compiled + ASan-run upstream.
 
 ---
 
