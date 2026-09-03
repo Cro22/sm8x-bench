@@ -1,8 +1,9 @@
-# Ready-to-post GitHub issue for modular/modular
+# GitHub issue for modular/modular — FILED
 
-Copy-paste the block below as a new issue at github.com/modular/modular.
-**Claude does not post this** — no auth on this box, and per repo policy outward-
-facing posts are yours to make. Detailed fix spec: `reports/max-B-fix.md`.
+**Filed 2026-09-03 as [modular#7069](https://github.com/modular/modular/issues/7069)**
+(by Jesús / Cro22, with explicit go-ahead). Confirmed beforehand that no existing
+issue/PR reported this. Detailed fix spec: `reports/max-B-fix.md`. The body posted
+is below.
 
 ---
 

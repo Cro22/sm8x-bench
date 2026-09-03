@@ -36,7 +36,7 @@ Per-issue PR status (verified 2026-09-03):
 | Issue | Open PR? | What we do |
 |---|---|---|
 | **A. Q4_0 g32 compile-fail** | **#6708** fixes group<BK, validates g32 (draft) | **Don't touch.** Only, once it lands: verify GGUF Q4_0 on sm_86 + add the Q4_0 test it lacks. |
-| **B. Unmasked A-tile load** | **None** (dedicated search) | **This is the one clean fix to actually do.** Not touched by #6668/#6708 (verified). |
+| **B. Unmasked A-tile load** | **FILED as [#7069](https://github.com/modular/modular/issues/7069)** (no prior issue/PR) | Writeup `max-B-fix.md`; PR next (needs a MAX build env). |
 | **C. No M=1 decode-quant GEMV** | **#6668** does exactly this **for NVFP4** | **Don't build a competing GEMV.** The pattern is already upstream. Only verify whether Q4_0 rides it; if not, that wiring is the niche. |
 | **D. Attention seq-4096 gap** | **None** (and not a confirmed defect) | Just the paged-FlashInfer measurement to confirm/deny. |
 
