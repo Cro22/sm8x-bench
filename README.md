@@ -3,13 +3,13 @@
 A rigorous benchmark workbench for LLM inference kernels on **consumer** NVIDIA
 GPUs (RTX 3090 = sm_86, RTX 4090 = sm_89). It measures the kernels that ship in
 Modular's open-source **MAX** engine (written in Mojo) against the best CUDA
-baselines (llama.cpp, cuBLAS, FlashInfer) and against the hardware roofline — on
-hardware Modular does not tune for — and, where the audit finds a real gap,
+baselines (llama.cpp, cuBLAS, FlashInfer) and against the hardware roofline (on
+hardware Modular does not tune for), and, where the audit finds a real gap,
 writes a better kernel intended for upstreaming to `modular/max/kernels`.
 
 This is a workbench and a public record, **not** a competing kernel library.
 
-Owner: Jesús ([Cro22](https://github.com/Cro22)). Methodology reused from
+Owner: Jesus ([Cro22](https://github.com/Cro22)). Methodology reused from
 [mojo-cuda-ampere](https://github.com/Cro22/mojo-cuda-ampere).
 
 ---
@@ -17,29 +17,29 @@ Owner: Jesús ([Cro22](https://github.com/Cro22)). Methodology reused from
 ## Headline result (RTX 3090, sm_86)
 
 On consumer Ampere, MAX's **dense** decode kernels are already at the roofline;
-its **4-bit** path is uneven — good on some shapes, absent or datacenter-slow on
+its **4-bit** path is uneven: good on some shapes, absent or datacenter-slow on
 others. We wrote a Q4_0 decode GEMV that runs well and uniformly across all
 shapes, close to llama.cpp.
 
-- **Dense GEMV (fp16/bf16)** — 87–98 % of the memory-bandwidth roofline at M=1;
+- **Dense GEMV (fp16/bf16):** 87–98 % of the memory-bandwidth roofline at M=1;
   no gap to close (and it beats cuBLAS at M=1, which falls to a GEMM tile).
   ([details](reports/h0-results.md))
-- **Attention decode** (flash-decoding over paged KV) — at the roofline and **ahead
+- **Attention decode** (flash-decoding over paged KV): at the roofline and **ahead
   of FlashInfer at long context** (16k: MAX 96.0 % vs FlashInfer-paged 86.3 %; MAX
   ahead in both measured rounds) with a **modest mid-context gap**: at seq 4096 MAX
   66.5 % vs FlashInfer 70.1 % on the same paged KV (~3–7 pts across rounds).
   Attention has large ±5–10 % run-to-run variance; the 3 pass medians are preserved
-  in each JSON. A tuning gap at seq~4k, not "nothing to improve" —
-  [details](reports/h0-results.md).
-- **Q4_0 (4-bit) matmul, MAX's real dispatch** — uneven: it **has a decode-tuned
+  in each JSON. A tuning gap at seq~4k, not "nothing to improve"
+  ([details](reports/h0-results.md)).
+- **Q4_0 (4-bit) matmul, MAX's real dispatch** is uneven: it **has a decode-tuned
   config** for up_proj/down_proj (69–81 % of roofline), **falls to a datacenter
   GEMM tile** for gate_up/lm_head (15 %), and **fails to compile** for
   GGUF Q4_0 (group_size 32) on o_proj/qkv. MAX has no single decode-quant kernel
   that works well everywhere.
-- **Our Q4_0 GEMV** ([`kernels/q4_0_gemv.mojo`](kernels/q4_0_gemv.mojo)) —
+- **Our Q4_0 GEMV** ([`kernels/q4_0_gemv.mojo`](kernels/q4_0_gemv.mojo)):
   **74–102 % of roofline on every shape, at parity with llama.cpp.** After tuning
   (multiple output rows per warp for memory-level parallelism + a per-shape launch
-  config) it **matches** llama.cpp Q4_0 — measured same-session, 3 passes each:
+  config) it **matches** llama.cpp Q4_0, measured same-session, 3 passes each:
   five of six shapes are ties within the 0–9 % run-to-run noise (the locked
   graphics clock doesn't lock the GDDR6X memory clock and the shared desktop steals
   bandwidth), and llama.cpp is faster on gate_up. No shape is a robust win for ours.
@@ -51,7 +51,7 @@ shapes, close to llama.cpp.
 ### Q4_0 decode GEMV, three implementations, same weights, same measurement
 
 nsys per-kernel time / % of the 936 GB/s spec roofline, M=1, RTX 3090, graphics
-clock verified 1695 MHz per run (memory clock NOT lockable on GeForce — see below).
+clock verified 1695 MHz per run (memory clock NOT lockable on GeForce; see below).
 MAX measured through its **real** public dispatcher (`matmul_gpu_qint4[g32]`),
 llama.cpp with CUDA graphs disabled. **ours and llama.cpp: same-session, 3 passes
 each** (median / least-contended min shown). This summary is a hand-transcribed
@@ -71,7 +71,7 @@ Ours is at **parity** with llama.cpp Q4_0 (five of six shapes tie within the 0�
 run-to-run band; llama.cpp is faster on gate_up), faster than MAX on the four
 shapes MAX can run, and it runs the two MAX compile-fails (no MAX speed to beat
 there). The band is wide because a locked graphics clock does not lock the GDDR6X memory
-clock and the desktop compositor steals bandwidth — so per-shape gaps under ~5 %
+clock and the desktop compositor steals bandwidth, so per-shape gaps under ~5 %
 are noise. Full tables (dense fp16/bf16, Q8_0/Q4_K, attention, cuBLAS, FlashInfer,
 the bandwidth probe) with links to every results JSON:
 **[reports/h0-results.md](reports/h0-results.md)**.
@@ -83,7 +83,7 @@ the bandwidth probe) with links to every results JSON:
 MAX's int4 path is a **tensor-core GEMM**. Where the dispatch has a decode-tuned
 config (small BM), it does well (down_proj/up_proj, 69–81 %). Where a shape falls
 to the default 128×128 tile (gate_up/lm_head), at M=1 it uses 1 of 128 tile rows
-(1/128 of the tensor-core work and A-bandwidth wasted) — hence 15 %; the limiter
+(1/128 of the tensor-core work and A-bandwidth wasted), hence 15 %; the limiter
 is *inferred* to be per-weight dequant compute, not measured with ncu (blocked on
 this box). And for group_size 32 with a BK=128 tuned config
 (o_proj/qkv) it **fails to compile**. So the slowness is a *design bias*
@@ -93,21 +93,21 @@ compile failure is a *bug*. Full design-vs-bug analysis with file:line:
 
 The compile failure is reproduced through the **public** dispatcher
 (`matmul_gpu_qint4[group_size=32]`, not a forced config): `32 // BK(128) == 0`
-→ an `int_tuple` out-of-bounds at `qmatmul_gpu.mojo:873`. It is a genuine MAX
-limitation, not a harness setup error — the *identical* harness at the same
+→ an `int_tuple` out-of-bounds at `int_tuple.mojo:199`, reached from `qmatmul_gpu.mojo:873`. It is a genuine MAX
+limitation, not a harness setup error: the *identical* harness at the same
 `group_size=32` compiles and runs validated for up_proj/down_proj (BK=32 configs)
 and fails only on o_proj/qkv. The full compiler output is committed alongside each
 compile-fail JSON as `bench/results/max_gemv_Q4-0-M1-{o_proj,qkv_fused}.compile_error.txt`.
 
 Our kernel does what llama.cpp does: quantize the activations to **Q8_1** once,
 then compute the Q4_0·Q8_1 dot with **`dp4a` int8 multiply-accumulate** (emitted
-as inline PTX — the Mojo stdlib has no `dp4a` on sm_86), unpacking nibbles with a
+as inline PTX; the Mojo stdlib has no `dp4a` on sm_86), unpacking nibbles with a
 `0x0F0F0F0F` mask. That makes it memory-bound and uniformly near-roofline on all
 six shapes, including the ones where MAX compile-fails or drops to 15 %.
 
 Upstream questions (a compile-fix for g32, a latent out-of-bounds A-tile load
 that only manifests when BM > M and K is large) are drafted in
-**[reports/open-questions.md](reports/open-questions.md)** — the latter is a
+**[reports/open-questions.md](reports/open-questions.md)**; the latter is a
 latent bug our forced-config experiment exposed, not something MAX's real
 dispatch hits at these shapes.
 
@@ -127,7 +127,7 @@ dispatch hits at these shapes.
 ## Repo layout
 
 ```
-kernels/            our kernels (q4_0_gemv.mojo) — upstream candidates
+kernels/            our kernels (q4_0_gemv.mojo), upstream candidates
 bench/
   shapes.py         canonical Llama-3-8B shapes (single source of truth)
   roofline.py       spec + measured roofline, minimum-traffic byte counts
@@ -149,18 +149,18 @@ scripts/            gpu-lock.sh, sweep_gemv.sh
 
 - **Locked clocks.** Graphics clock locked to 1695 MHz (3090) for every run and
   **sampled under load and recorded in each GEMV/attention JSON** (all 1695); the
-  **bandwidth-probe** JSON is the exception — it records only the CLI-passed clock.
+  **bandwidth-probe** JSON is the exception: it records only the CLI-passed clock.
   Memory clock isn't lockable on GeForce, so bandwidth-bound kernels still have a
   0–9 % run-to-run band. See `scripts/gpu-lock.sh`.
-- **Authoritative timing is nsys per-kernel duration**, not wall-clock — it
+- **Authoritative timing is nsys per-kernel duration**, not wall-clock: it
   excludes host-side dispatch overhead (amortized in production) and is robust to
   the desktop sharing the GPU. Cross-checked that the harness agrees where the
   dispatch is cheap.
 - **Correctness before timing.** Every kernel is validated against an fp32
-  reference (relative L2 error — the standard GEMM metric, robust to
+  reference (relative L2 error, the standard GEMM metric, robust to
   cancellation) before any number is recorded.
 - **Same weights across implementations.** MAX, llama.cpp, and our kernel read
-  the *identical* GGUF Q4_0 bytes and the same seeded activation values — though
+  the *identical* GGUF Q4_0 bytes and the same seeded activation values, though
   llama.cpp consumes them as **F32** while MAX and ours use **BF16** (a noted
   asymmetry; the weight traffic that dominates is identical). The **ours and
   llama.cpp Q4_0** JSONs record the sha256 of the exact W/x/ref bytes read; the
@@ -177,7 +177,7 @@ scripts/            gpu-lock.sh, sweep_gemv.sh
 ```bash
 # toolchain (uv): max==26.5.0 / Mojo 1.0.0; modular submodule at tag max/v26.5.0
 uv sync && git submodule update --init --depth 1
-# build the baseline drivers once (llama.cpp src/ must be built with CUDA sm_86 first —
+# build the baseline drivers once (llama.cpp src/ must be built with CUDA sm_86 first;
 # cmake -B bench/baselines/llamacpp/src/build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=86 -DCMAKE_BUILD_TYPE=Release
 # then cmake --build that dir; the driver build steps are committed scripts):
 bash bench/baselines/llamacpp/build_gemv_bench.sh    # gemv_bench + quantize_weight
@@ -185,7 +185,7 @@ bash bench/baselines/cublas/build_cublas_gemv.sh     # cuBLAS fp16 driver
 
 # lock the GRAPHICS clock on the Windows host (admin): nvidia-smi -lgc 1695,1695
 # (the GDDR6X memory clock is NOT lockable on GeForce; it and desktop contention give
-#  a 0-9% run-to-run band — the graphics clock is sampled under load and recorded per JSON)
+#  a 0-9% run-to-run band; the graphics clock is sampled under load and recorded per JSON)
 uv run python -m bench.run_bw_probe --locked-clock 1695              # measured roofline
 scripts/sweep_gemv.sh 816.3 1695                                     # MAX dense fp16/bf16
 uv run python -m bench.run_gemv_max_dispatch --shape gate_up --M 1 --locked-clock 1695 --measured-gbps 816.3   # MAX Q4_0 REAL dispatch
@@ -202,8 +202,8 @@ uv run python -m bench.report                                        # regenerat
   (see the table): MAX has a good decode config for some shapes, a datacenter
   GEMM (15 %) for others, and a g32 compile failure for two. llama.cpp GEMV
   baselines cover **Q4_0, Q8_0 and Q4_K** (Q8_0/Q4_K are bandwidth-saturated and
-  have no MAX GPU counterpart — CPU-only upstream). The **cuBLAS fp16 GEMV** dense
-  ceiling is measured too — and at M=1 cuBLAS falls to a tensor-core GEMM tile on
+  have no MAX GPU counterpart, CPU-only upstream). The **cuBLAS fp16 GEMV** dense
+  ceiling is measured too, and at M=1 cuBLAS falls to a tensor-core GEMM tile on
   five of six shapes, so **MAX's split-K fp16 GEMV actually beats cuBLAS** there
   (e.g. o_proj 90.6 % vs 79.2 %). The **FlashInfer decode-attention** baseline
   (paged, page 128, same-session 3-pass, all 3 medians in the JSON) surfaces a real
@@ -212,8 +212,8 @@ uv run python -m bench.report                                        # regenerat
   (66.5 % vs 70.1 %). Attention has ±5–10 % run-to-run variance, so the direction is
   the claim. A narrow mid-context tuning gap. Only llama.cpp flash-attn remains.
 - **H1 (write the gap kernel):** our Q4_0 GEMV is 74–102 % of roofline on all six
-  shapes — at **parity** with llama.cpp (same-session 3-pass: five ties, llama.cpp
-  faster on gate_up; no robust ours win) — and faster than MAX on the four shapes
+  shapes, at **parity** with llama.cpp (same-session 3-pass: five ties, llama.cpp
+  faster on gate_up; no robust ours win), and faster than MAX on the four shapes
   MAX can run (~6× on gate_up/lm_head); it also runs the two where MAX compile-fails
   (no MAX speed to beat there). Uniform coverage at the baseline's level, not
   beating it. M=1 only.
@@ -223,12 +223,12 @@ uv run python -m bench.report                                        # regenerat
 
 This record was corrected across **three** adversarial reviews. The first found MAX
 had been measured through a forced fallback config (not its real dispatcher) with
-unproven clocks. The second found the report oversold rigor — so **"beats
+unproven clocks. The second found the report oversold rigor, so **"beats
 llama.cpp on four of six" is retracted** (same-session 3-pass measurement shows
 parity), input hashes and 3 pass medians are stored in the Q4_0 JSONs,
 "compute-bound" is relabeled an inferred diagnosis, and the memory clock (which
 these bandwidth-bound kernels actually depend on) is documented as unlockable and
-uncontrolled. The third tightened residual claims — the attention 3-pass envelope
+uncontrolled. The third tightened residual claims: the attention 3-pass envelope
 is now stored in its JSONs too (not just written in prose), and single-run/rounding/
 byte-count limitations are declared. See reports/h0-results.md "Corrections".
 
