@@ -38,7 +38,7 @@ Per-issue PR status (verified 2026-09-03):
 | **A. Q4_0 g32 compile-fail** | **#6708** fixes group<BK, validates g32 (draft) | **Don't touch.** Only, once it lands: verify GGUF Q4_0 on sm_86 + add the Q4_0 test it lacks. |
 | **B. Unmasked A-tile load** | **FILED as [#7069](https://github.com/modular/modular/issues/7069)** (no prior issue/PR) | Writeup `max-B-fix.md`; PR next (needs a MAX build env). |
 | **C. No M=1 decode-quant GEMV** | **#6668** does exactly this **for NVFP4** | **Don't build a competing GEMV.** The pattern is already upstream. Only verify whether Q4_0 rides it; if not, that wiring is the niche. |
-| **D. Attention seq-4096 gap** | **None** | **RESOLVED to a real ~8-pt gap** (paged-FlashInfer done): worth a forum question / consumer-Ampere tuning ask, not a bug PR. |
+| **D. Attention seq-4096 gap** | **None** | **RESOLVED to a modest ~3-7-pt gap** (paged-FlashInfer done): worth a forum question / consumer-Ampere tuning ask, not a bug PR. |
 
 So under "don't duplicate a PR", the actionable work shrinks to: **B** (real fix),
 **D's measurement**, and **Q4_0-specific tests/verification** riding on the #6668/
@@ -55,8 +55,8 @@ So under "don't duplicate a PR", the actionable work shrinks to: **B** (real fix
   body wrapped in `BEGIN_PUBLIC` / `END_PUBLIC`, signed. Each fix ships with a test.
 - Land the two **bug fixes** (A, B) first — small, self-contained, obviously
   correct. The **coverage gap** (C) is the real perf contribution and is larger.
-  The **attention gap** (D) is not yet a confirmed MAX defect — it needs one more
-  measurement before any fix is proposed.
+  The **attention gap** (D) is measured and confirmed (modest, ~3–7 pt at seq 4096)
+  — a tuning/forum item, not a bug PR.
 
 ---
 
@@ -175,12 +175,13 @@ at M=1 and gate a roofline-% regression check.
 
 ---
 
-## D. Attention decode mid-context gap — RESOLVED: a real ~8-pt gap (forum item, not a bug PR)
+## D. Attention decode mid-context gap — RESOLVED: a modest ~3–7-pt gap (forum item, not a bug PR)
 
 **Symptom + disambiguation (measured, done).** MAX `mha_decoding` is at the
-roofline at long context (86.7 % at seq 16384) but 61.7 % at seq 4096. The first
-comparison (FlashInfer *contiguous* 79.3 %) was confounded by MAX's *paged* KV.
-Running FlashInfer **paged** (page 128) at the same shapes splits the 18-pt gap:
+roofline and *ahead* of FlashInfer at long context, but trails at seq 4096. The
+first comparison looked like +17.6 pts (MAX 61.7 % vs FlashInfer *contiguous*
+79.3 %), but that was confounded by MAX's *paged* vs FlashInfer's *contiguous* KV.
+Running FlashInfer **paged** (page 128) same-session at the same shapes:
 
 Same-session, 3 passes each, all preserved in `timing.passes` (committed run):
 
@@ -209,7 +210,7 @@ The "don't touch anything with a PR" rule leaves only three things that are ours
 1. **B — mask the A-tile load.** The single clean fix with no competing PR.
    **FILED as [#7069](https://github.com/modular/modular/issues/7069)**; PR next
    (needs a MAX build env). Writeup: `reports/max-B-fix.md`.
-2. **D — DONE (measurement).** Paged FlashInfer confirmed a real ~8-pt seq-4096 gap
+2. **D — DONE (measurement).** Paged FlashInfer confirmed a modest ~3–7-pt seq-4096 gap
    (not the ~18 confounded). It is a *tuning* question, not a bug → forum draft in
    `reports/open-questions.md`, no PR.
 3. **Track #6668 + #6708; when they land, verify Q4_0 on sm_86** — does g32 now

@@ -105,10 +105,10 @@ measuring MAX's REAL dispatch (not a forced config):
 ## MAX attention decode: mid-context gap vs FlashInfer (seq 4096)
 
 MAX `mha_decoding` decode attention (GQA 32/8, hd128, fp16 KV, batch 1) is at the
-roofline at long context (86.7% of spec at seq 16384) but only **61.7%** at seq
-4096, while **FlashInfer** on the same shapes hits **79.3%** — a **+17.6-point**
-gap that MAX leaves on the table at mid context. This revises the earlier
-"attention has no gap" reading.
+roofline at long context but trails FlashInfer at seq 4096. The first comparison
+looked like a +17.6-point gap (MAX 61.7 % vs FlashInfer 79.3 %), but that used
+FlashInfer with *contiguous* KV vs MAX's *paged* KV — a confound. Resolved below
+with a paged-vs-paged, same-session measurement.
 
 **RESOLVED (2026-09-03) — confound removed, measured same-session 3× each.** MAX
 and FlashInfer paged (`BatchDecodeWithPagedKVCacheWrapper`, page 128), 3 passes:

@@ -14,7 +14,7 @@ On the RTX 3090 (sm_86), MAX's dense decode GEMV is at the memory-bandwidth limi
 (fp16/bf16 M=1 at **90–97 % of spec** across all projection shapes) and its
 attention decode is at the limit and **ahead of FlashInfer at long context** (16k:
 MAX 96.0 % vs FlashInfer-paged 86.3 %; MAX ≥ FlashInfer in both measured rounds),
-with a **modest mid-context gap**: at seq 4096 MAX 66.5 % vs FlashInfer 70.0 % on
+with a **modest mid-context gap**: at seq 4096 MAX 66.5 % vs FlashInfer 70.1 % on
 the same paged KV (~3–7 pts across rounds — attention has large ±5–10 % run-to-run
 variance; the 3 pass medians are in each JSON's `timing.passes`; see caveats). Its
 **Q4_0 (4-bit)** path, measured through its real dispatcher, is **uneven**: a
@@ -222,7 +222,7 @@ results JSON.
   | seq | MAX (range) | FlashInfer paged (range) | FlashInfer contiguous¹ |
   |---|---|---|---|
   | 1024 | 26.9 (26.9–26.9) | 39.4 (38.4–41.2) | 27.0 |
-  | 4096 | 66.5 (66.5–66.6) | **70.0 (67.6–72.9)** | 79.3 |
+  | 4096 | 66.5 (66.5–66.6) | **70.1 (67.6–72.9)** | 79.3 |
   | 16384 | **96.0 (95.8–96.0)** | 86.3 (85.1–89.1) | 89.7 |
 
   ¹ contiguous FlashInfer (`single_decode_with_kv_cache`), earlier session — context
@@ -235,7 +235,7 @@ results JSON.
   context (16k) MAX is at the roofline and *ahead* of FlashInfer** (96 vs 86 this
   round; 91 vs 90 the other — MAX ahead both times; the first, confounded "MAX 86.7"
   was a slow single run). At **seq 4096 FlashInfer is modestly ahead (~3–7 pts)** —
-  here MAX 66.5 vs 70.0, ranges nearly touching (MAX 66.6 < FlashInfer 67.6). At seq
+  here MAX 66.5 vs 70.1, ranges nearly touching (MAX 66.6 < FlashInfer 67.6). At seq
   1024 both are latency-bound (FlashInfer ahead, tiny absolute). Net: MAX decode
   attention is competitive-to-best at long context; the only soft spot is a
   **modest mid-context (seq~4k) gap**, cause **inferred** (split-K / occupancy at
@@ -389,7 +389,7 @@ are still not versioned.
 resolved result. (2) The attention 3-pass envelope is now **stored in the JSONs** (`timing.passes`),
 not just written in prose — the attention runners take `--passes` and preserve all
 pass medians. Re-measured MAX and paged FlashInfer same-session; at seq 4096 MAX
-66.5 vs FlashInfer 70.0 (FlashInfer ahead in both rounds, ~3–7 pts) and at seq
+66.5 vs FlashInfer 70.1 (FlashInfer ahead in both rounds, ~3–7 pts) and at seq
 16384 MAX is *ahead* (96.0 vs 86.3; the earlier "86.7 / MAX behind" was a slow
 single run). Attention has ±5–10 % run-to-run variance, so only the direction is
 claimed; the cause stays an *inferred* tuning gap. (3) The input-hash claim is scoped to ours/llama Q4_0 (the MAX

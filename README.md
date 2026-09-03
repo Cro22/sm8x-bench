@@ -27,7 +27,7 @@ shapes, close to llama.cpp.
 - **Attention decode** (flash-decoding over paged KV) — at the roofline and **ahead
   of FlashInfer at long context** (16k: MAX 96.0 % vs FlashInfer-paged 86.3 %; MAX
   ahead in both measured rounds) with a **modest mid-context gap**: at seq 4096 MAX
-  66.5 % vs FlashInfer 70.0 % on the same paged KV (~3–7 pts across rounds).
+  66.5 % vs FlashInfer 70.1 % on the same paged KV (~3–7 pts across rounds).
   Attention has large ±5–10 % run-to-run variance; the 3 pass medians are preserved
   in each JSON. A tuning gap at seq~4k, not "nothing to improve" —
   [details](reports/h0-results.md).
@@ -206,10 +206,11 @@ uv run python -m bench.report                                        # regenerat
   ceiling is measured too — and at M=1 cuBLAS falls to a tensor-core GEMM tile on
   five of six shapes, so **MAX's split-K fp16 GEMV actually beats cuBLAS** there
   (e.g. o_proj 90.6 % vs 79.2 %). The **FlashInfer decode-attention** baseline
-  (paged, page 128, same-session 3-pass) surfaces a real finding: MAX is at the
-  roofline and slightly ahead at long context (91.0 % vs 89.9 % at seq 16384) but
-  trails ~6–7 pts at seq 4096 (**63.7 % vs 70.2 %**, non-overlapping distributions).
-  A narrow, confirmed mid-context tuning gap. Only llama.cpp flash-attn remains.
+  (paged, page 128, same-session 3-pass, all 3 medians in the JSON) surfaces a real
+  finding: MAX is at the roofline and **ahead at long context** (96.0 % vs 86.3 % at
+  seq 16384; MAX ahead in both measured rounds) but trails ~3–7 pts at seq 4096
+  (66.5 % vs 70.1 %). Attention has ±5–10 % run-to-run variance, so the direction is
+  the claim. A narrow mid-context tuning gap. Only llama.cpp flash-attn remains.
 - **H1 (write the gap kernel):** our Q4_0 GEMV is 74–102 % of roofline on all six
   shapes — at **parity** with llama.cpp (same-session 3-pass: five ties, llama.cpp
   faster on gate_up; no robust ours win) — and faster than MAX on the four shapes
