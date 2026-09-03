@@ -2,7 +2,7 @@
   "schema": 1,
   "impl": "max",
   "kernel": "attention_decode",
-  "variant": "fp16_gqa32x8_hd128_seq16384",
+  "variant": "fp16_gqa32x8_hd128_seq4096",
   "gpu": {
     "name": "NVIDIA GeForce RTX 3090",
     "arch": "sm_86",
@@ -21,7 +21,7 @@
       "min": 1695,
       "max": 1695,
       "median": 1695,
-      "n": 100
+      "n": 64
     }
   },
   "shape": {
@@ -29,7 +29,7 @@
     "q_heads": 32,
     "kv_heads": 8,
     "head_dim": 128,
-    "seq_len": 16384,
+    "seq_len": 4096,
     "page_size": 128
   },
   "dtype": {
@@ -37,45 +37,53 @@
     "q": "fp16",
     "accum": "fp32"
   },
-  "bytes_moved": 67108864,
-  "flops": 268435456,
+  "bytes_moved": 16777216,
+  "flops": 67108864,
   "timing": {
     "source": "nsys_gpukernsum",
     "n_instances": 262,
     "launches_per_sample": 0,
-    "median_us": 82.661,
+    "median_us": 28.157,
     "q1_us": 0,
     "q3_us": 0,
-    "min_us": 81.538,
+    "min_us": 27.378,
     "p95_us": 0,
-    "nsys_mean_us": 82.8978,
-    "harness_wallclock_median_us": 103.995,
+    "nsys_mean_us": 28.1885,
+    "harness_wallclock_median_us": 56.173,
     "kernels": [
       {
         "name": "mha_decoding_depth128_float16_float16_16x128x32_True_nqh32_nkvh8_6f96a9cc",
         "instances": 131,
-        "avg_us": 80.4083
+        "avg_us": 25.836,
+        "med_us": 25.818,
+        "min_us": 25.129,
+        "max_us": 27.078,
+        "stddev_us": 0.3575
       },
       {
         "name": "mha_splitk_reduce_float16_float16_57fed817",
         "instances": 131,
-        "avg_us": 2.4895
+        "avg_us": 2.3525,
+        "med_us": 2.339,
+        "min_us": 2.249,
+        "max_us": 2.519,
+        "stddev_us": 0.0605
       }
     ]
   },
-  "achieved_gbps": 811.86,
-  "achieved_tflops": 3.247,
+  "achieved_gbps": 595.85,
+  "achieved_tflops": 2.383,
   "roofline": {
     "spec_gbps": 936.0,
     "measured_gbps": 816.3,
-    "pct_spec": 86.7,
-    "pct_measured": 99.5
+    "pct_spec": 63.7,
+    "pct_measured": 73.0
   },
   "correctness": {
     "validated": true,
-    "l2_rel_err": 0.0002660935,
-    "max_abs_err": 0.00048828125,
-    "max_rel_err": 0.0009765605,
+    "l2_rel_err": 0.00037812174,
+    "max_abs_err": 0.0007324219,
+    "max_rel_err": 0.001472751,
     "tolerance": "l2_rel<2e-2 (vs mha_gpu_naive)"
   },
   "env": {
@@ -85,8 +93,8 @@
     "cuda_version": "13.3",
     "llamacpp_sha": "",
     "flashinfer_version": "unknown",
-    "harness_sha": "c251359282a08c1f22a8349cbc89328166758ad3-dirty",
-    "timestamp_utc": "2026-09-02T02:54:00.568720+00:00"
+    "harness_sha": "ebafec1efc3e9351ba56f4de32e56f22f5dca2dc-dirty",
+    "timestamp_utc": "2026-09-03T01:45:54.761748+00:00"
   },
-  "notes": "nsys-authoritative; kernel(s): mha_decoding_depth128_float16_float16_16x128x32_True_nqh32_nkvh8_6f96a9cc, mha_splitk_reduce_float16_float16_57fed817. correctness vs mha_gpu_naive. harness wall-clock median 103.995 us (1.3x nsys). "
+  "notes": "nsys-authoritative; kernel(s): mha_decoding_depth128_float16_float16_16x128x32_True_nqh32_nkvh8_6f96a9cc, mha_splitk_reduce_float16_float16_57fed817. correctness vs mha_gpu_naive. harness wall-clock median 56.173 us (2.0x nsys). "
 }

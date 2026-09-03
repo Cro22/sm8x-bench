@@ -24,11 +24,11 @@ shapes, close to llama.cpp.
 - **Dense GEMV (fp16/bf16)** — 87–98 % of the memory-bandwidth roofline at M=1;
   no gap to close (and it beats cuBLAS at M=1, which falls to a GEMM tile).
   ([details](reports/h0-results.md))
-- **Attention decode** (flash-decoding over paged KV) — near the roofline at long
-  context (86.7 % of spec at 16k) with a **modest, confirmed mid-context gap**: at
-  seq 4096 MAX is 61.7 % vs FlashInfer's **70.1 % on the same paged KV** (~8 pts;
-  the rest of the raw contiguous 79.3 % was paging cost). A tuning gap, not
-  "nothing to improve" — details in [reports/h0-results.md](reports/h0-results.md).
+- **Attention decode** (flash-decoding over paged KV) — at the roofline at long
+  context (**91.0 % at 16k, a hair ahead of FlashInfer**) with a narrow mid-context
+  gap: at seq 4096 MAX is 63.7 % vs FlashInfer's 70.2 % on the same paged KV
+  (~6–7 pts, same-session 3 passes each, non-overlapping). A tuning gap at seq~4k,
+  not "nothing to improve" — details in [reports/h0-results.md](reports/h0-results.md).
 - **Q4_0 (4-bit) matmul, MAX's real dispatch** — uneven: it **has a decode-tuned
   config** for up_proj/down_proj (69–81 % of roofline), **falls to a datacenter
   GEMM tile** for gate_up/lm_head (15 %), and **fails to compile** for
@@ -61,13 +61,14 @@ rounded copy of the JSON-generated tables in
 | o_proj 4096×4096       | compile-fail (g32) | **13.7 µs / 73.8 / 74.5** | 13.9 µs / 72.6 / 72.7 |
 | qkv 6144×4096          | compile-fail (g32) | **19.6 µs / 77.4 / 82.5** | 18.1 µs / 83.7 / 83.8 |
 | down_proj 4096×14336   | 43.5 µs / 81.2 %   | **38.4 µs / 92.0 / 92.0** | 38.0 µs / 92.9 / 94.7 |
-| up_proj 14336×4096     | 51.6 µs / 68.4 %   | **41.7 µs / 84.8 / 88.1** | 39.9 µs / 88.5 / 88.4 |
+| up_proj 14336×4096     | 51.6 µs / 68.4 %   | **41.7 µs / 84.8 / 88.1** | 39.9 µs / 88.5 / 88.5 |
 | gate_up 28672×4096     | 474 µs / 14.9 %    | **77.0 µs / 91.7 / 91.8** | 70.6 µs / 100.1 / 100.1 |
 | lm_head 128256×4096    | 2031 µs / 15.6 %   | **312 µs / 101.2 / 101.9** | 311 µs / 101.5 / 101.5 |
 
 Ours is at **parity** with llama.cpp Q4_0 (five of six shapes tie within the 0–9 %
-run-to-run band; llama.cpp is faster on gate_up), and faster than MAX on all six.
-The band is wide because a locked graphics clock does not lock the GDDR6X memory
+run-to-run band; llama.cpp is faster on gate_up), faster than MAX on the four
+shapes MAX can run, and it runs the two MAX compile-fails (no MAX speed to beat
+there). The band is wide because a locked graphics clock does not lock the GDDR6X memory
 clock and the desktop compositor steals bandwidth — so per-shape gaps under ~5 %
 are noise. Full tables (dense fp16/bf16, Q8_0/Q4_K, attention, cuBLAS, FlashInfer,
 the bandwidth probe) with links to every results JSON:
@@ -154,10 +155,12 @@ scripts/            gpu-lock.sh, sweep_gemv.sh
   reference (relative L2 error — the standard GEMM metric, robust to
   cancellation) before any number is recorded.
 - **Same weights across implementations.** MAX, llama.cpp, and our kernel read
-  the *identical* GGUF Q4_0 bytes (sha256 recorded in each result JSON) and the
-  same seeded activation values — though llama.cpp consumes them as **F32** while
-  MAX and ours use **BF16** (a noted asymmetry; the weight traffic that dominates
-  is identical).
+  the *identical* GGUF Q4_0 bytes and the same seeded activation values — though
+  llama.cpp consumes them as **F32** while MAX and ours use **BF16** (a noted
+  asymmetry; the weight traffic that dominates is identical). The **ours and
+  llama.cpp Q4_0** JSONs record the sha256 of the exact W/x/ref bytes read; the
+  older MAX/attention/cuBLAS JSONs predate that harness change and do **not**
+  carry input hashes (their inputs are the same committed generators).
 - **No number is hand-typed in the generated tables.** Every cell in
   [reports/h0-results.md](reports/h0-results.md) comes from a committed results
   JSON via `bench/report.py`; a value that can't be measured is `N/A` with the
@@ -197,20 +200,20 @@ uv run python -m bench.report                                        # regenerat
   have no MAX GPU counterpart — CPU-only upstream). The **cuBLAS fp16 GEMV** dense
   ceiling is measured too — and at M=1 cuBLAS falls to a tensor-core GEMM tile on
   five of six shapes, so **MAX's split-K fp16 GEMV actually beats cuBLAS** there
-  (e.g. o_proj 90.6 % vs 79.2 %). The **FlashInfer decode-attention** baseline is
-  done and surfaces a real finding: MAX matches it at long context (86.7 % at
-  seq 16384) but trails at seq 4096 (**61.7 % vs 79.3 %**) — a mid-context gap
-  (partly confounded by MAX's paged vs FlashInfer's contiguous KV; a paged
-  FlashInfer run is the open follow-up). Only llama.cpp flash-attn remains.
+  (e.g. o_proj 90.6 % vs 79.2 %). The **FlashInfer decode-attention** baseline
+  (paged, page 128, same-session 3-pass) surfaces a real finding: MAX is at the
+  roofline and slightly ahead at long context (91.0 % vs 89.9 % at seq 16384) but
+  trails ~6–7 pts at seq 4096 (**63.7 % vs 70.2 %**, non-overlapping distributions).
+  A narrow, confirmed mid-context tuning gap. Only llama.cpp flash-attn remains.
 - **H1 (write the gap kernel):** our Q4_0 GEMV is 74–102 % of roofline on all six
   shapes — at **parity** with llama.cpp (same-session 3-pass: five ties, llama.cpp
-  faster on gate_up; no robust ours win) — and faster than MAX on all six,
-  including the two MAX compile-fails and the two where MAX drops to 15 %. The
-  contribution is uniform coverage at the baseline's level, not beating it. M=1 only.
+  faster on gate_up; no robust ours win) — and faster than MAX on the four shapes
+  MAX can run (~6× on gate_up/lm_head); it also runs the two where MAX compile-fails
+  (no MAX speed to beat there). Uniform coverage at the baseline's level, not
+  beating it. M=1 only.
 - **Not yet:** M>1 for our kernel, the residual quantize-launch overhead on the
   smallest shapes, sm_89 (no 4090 on the bench box), the last baseline (llama.cpp
-  flash-attn) + the paged-FlashInfer disambiguation, raw `.nsys-rep` artifacts, and
-  preparing the upstream contribution.
+  flash-attn), raw `.nsys-rep` artifacts, and preparing the upstream contribution.
 
 This record was corrected after **two** adversarial reviews. The first found MAX
 had been measured through a forced fallback config (not its real dispatcher) with
